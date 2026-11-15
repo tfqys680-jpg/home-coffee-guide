@@ -1,0 +1,37 @@
+name: deploy
+# main の内容を GitHub Pages に公開する。
+# GITHUB_TOKEN によるマージでは push トリガーが動かないため、auto-publish からも呼び出す。
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  workflow_call:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Collect public files
+        run: |
+          mkdir _site
+          cp -r index.html about.html privacy.html disclaimer.html 404.html sitemap.xml robots.txt css js images _site/
+          [ -d column ] && cp -r column _site/ || true
+          touch _site/.nojekyll
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4
