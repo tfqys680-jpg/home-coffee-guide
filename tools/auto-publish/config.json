@@ -2,6 +2,7 @@
   "auto_merge": true,
   "auto_merge_ymyl_levels": ["低", "中"],
   "max_review_rounds": 2,
+  "max_quality_rounds": 1,
   "min_verified_sources": 2,
   "min_body_chars": 2500,
   "queue_file": "docs/auto-queue.csv",

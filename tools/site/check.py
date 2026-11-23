@@ -3,7 +3,7 @@
 
 - 各ページ: title / description / canonical / h1が1つ / タイトル重複なし
 - 内部リンク切れなし、JSON-LDが読める、パンくずの表示とJSON-LDが一致
-- 記事ページがトップとsitemapから辿れる
+- 記事ページがトップ・カテゴリページ・sitemapから辿れる
 - 記事本文に禁止表現（健康効果の断定など）がない
 - 画像ファイルが存在し、alt が空でない
 - 運営者の確認メモ（運営者本人が書く欄）は体験の表現だけを許し、健康効果の断定などは本文と同じく禁止
@@ -13,6 +13,7 @@ import json
 import os
 import re
 import sys
+import unicodedata
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -27,7 +28,10 @@ def load_config():
 
 
 def text_of(fragment):
-    return re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]+>", " ", fragment))).strip()
+    """タグを除いた本文。NFKC正規化し、ゼロ幅スペースなどの書式文字を除く（禁止表現のすり抜け対策）。"""
+    t = unicodedata.normalize("NFKC", html.unescape(re.sub(r"<[^>]+>", " ", fragment)))
+    t = "".join(ch for ch in t if unicodedata.category(ch) != "Cf")
+    return re.sub(r"\s+", " ", t).strip()
 
 
 def main():
@@ -60,7 +64,7 @@ def main():
             if data.get("@type") == "BreadcrumbList":
                 dom = re.search(r'<nav class="breadcrumb"[^>]*><ol>(.*?)</ol>', src, re.S)
                 dom_names = [text_of(x) for x in re.findall(r"<li>(.*?)</li>", dom.group(1), re.S)] if dom else []
-                ld_names = [x["name"] for x in data["itemListElement"]]
+                ld_names = [text_of(x["name"]) for x in data["itemListElement"]]  # 表示側と同じ正規化で比べる
                 if dom_names != ld_names:
                     errors.append(f"{rel}: パンくずの表示とJSON-LDが不一致 {dom_names} != {ld_names}")
         if rel == "404.html":
@@ -82,6 +86,8 @@ def main():
                 errors.append(f"{rel}: リンク切れ {href}")
         if rel.startswith("column/"):
             article = re.search(r"<article.*?</article>", src, re.S).group(0)
+            if any(unicodedata.category(ch) == "Cf" for ch in html.unescape(article)):
+                errors.append(f"{rel}: 見えない文字（ゼロ幅スペースなど）が含まれる")
             body = text_of(OPERATOR_NOTE.sub(" ", article)).replace("必ずしも", "")
             note = text_of(" ".join(OPERATOR_NOTE.findall(article))).replace("必ずしも", "")
             for phrase in banned:
@@ -98,8 +104,17 @@ def main():
             errors.append(f"column/{d.name}/ がトップから辿れない")
         if f"column/{d.name}/</loc>" not in sitemap:
             errors.append(f"column/{d.name}/ が sitemap にない")
-        if not (ROOT / "content/articles" / f"{d.name}.json").exists():
+        src = ROOT / "content/articles" / f"{d.name}.json"
+        if not src.exists():
             errors.append(f"column/{d.name}/ に対応する記事JSONがない")
+            continue
+        cat = json.loads(src.read_text(encoding="utf-8"))["article"].get("category")
+        if cat:
+            page = ROOT / "category" / cat / "index.html"
+            if not page.exists() or f'href="../../column/{d.name}/"' not in page.read_text(encoding="utf-8"):
+                errors.append(f"column/{d.name}/ がカテゴリページ category/{cat}/ から辿れない")
+            if f"category/{cat}/</loc>" not in sitemap:
+                errors.append(f"category/{cat}/ が sitemap にない")
 
     print(f"pages: {len(pages)}")
     if errors:

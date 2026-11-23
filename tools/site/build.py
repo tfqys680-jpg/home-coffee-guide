@@ -2,7 +2,7 @@
 """content/articles/*.json と site.json から静的サイト一式を生成する。
 
 生成物: index.html, about.html, privacy.html, disclaimer.html, 404.html,
-column/<slug>/index.html, sitemap.xml, robots.txt
+column/<slug>/index.html, category/<slug>/index.html（記事があるカテゴリのみ）, sitemap.xml, robots.txt
 記事の中身は JSON に保存し、HTMLは毎回ここから作り直す（レイアウト変更が全記事に反映される）。
 """
 import html
@@ -32,21 +32,38 @@ def jp_date(iso):
     return f"{y}年{m}月{d}日"
 
 
+LINK = re.compile(r"\[\[([a-z0-9-]+)\|([^\]]+)\]\]")  # 本文内の記事リンク [[slug|リンク文]]
+OGP = {"path": "images/ogp.png", "width": 1200, "height": 630}
+LOGO = "images/logo.png"
+
+
 def inline(text):
-    return re.sub(r"\[(\d+)\]", r'<a href="#source\1" class="cite" aria-label="出典\1">[\1]</a>', e(str(text)))
+    """記事ページ（column/<slug>/）用。出典番号と記事リンクをHTMLにする。"""
+    t = re.sub(r"\[(\d+)\]", r'<a href="#source\1" class="cite" aria-label="出典\1">[\1]</a>', e(str(text)))
+    return LINK.sub(lambda m: f'<a href="../{m.group(1)}/">{m.group(2)}</a>', t)
 
 
 def plain(text):
-    return re.sub(r"\s*\[\d+\]", "", str(text)).strip()
+    return LINK.sub(r"\2", re.sub(r"\s*\[\d+\]", "", str(text))).strip()
+
+
+def home(rel):
+    return rel or "./"
+
+
+def category_map(site):
+    return {c["slug"]: c for c in site.get("categories", [])}
 
 
 def ld(obj):
     return '<script type="application/ld+json">\n' + json.dumps(obj, ensure_ascii=False, indent=2) + "\n</script>"
 
 
-def layout(site, *, title, description, rel, path, body, page_type="website", extra_head="", noindex=False):
+def layout(site, *, title, description, rel, path, body, page_type="website", extra_head="", noindex=False, image=None):
     """rel: ルートへの相対パス（'' か '../../'）。path: サイト内パス（'' や 'column/x/'）。"""
     url = site["base_url"] + path
+    img = image or {"url": site["base_url"] + OGP["path"], "width": OGP["width"], "height": OGP["height"]}
+    img_size = "".join(f'<meta property="og:image:{k}" content="{img[k]}">\n' for k in ("width", "height") if img.get(k))
     full_title = title if title == site["site_name"] else f"{title}｜{site['site_name']}"
     ga = ""
     if site.get("ga_id"):
@@ -70,7 +87,8 @@ def layout(site, *, title, description, rel, path, body, page_type="website", ex
 <meta property="og:description" content="{e(description)}">
 <meta property="og:url" content="{url}">
 <meta property="og:site_name" content="{e(site['site_name'])}">
-<meta name="twitter:card" content="summary">
+<meta property="og:image" content="{e(img['url'])}">
+{img_size}<meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="{rel}images/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="{rel}css/style.css">
 {extra_head}</head>
@@ -78,12 +96,12 @@ def layout(site, *, title, description, rel, path, body, page_type="website", ex
 <a class="skip" href="#main">本文へ移動</a>
 <header class="site-header">
   <div class="wrap header-inner">
-    <p class="site-title"><a href="{rel}index.html">{e(site['site_name'])}<span>{e(site['tagline'])}</span></a></p>
+    <p class="site-title"><a href="{home(rel)}">{e(site['site_name'])}<span>{e(site['tagline'])}</span></a></p>
     <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="nav">メニュー</button>
     <nav id="nav" class="nav" aria-label="サイト内メニュー">
       <ul>
-        <li><a href="{rel}index.html">ホーム</a></li>
-        <li><a href="{rel}index.html#articles">記事一覧</a></li>
+        <li><a href="{home(rel)}">ホーム</a></li>
+        <li><a href="{home(rel)}#articles">記事一覧</a></li>
         <li><a href="{rel}about.html">運営者情報</a></li>
       </ul>
     </nav>
@@ -159,21 +177,28 @@ def render_article(site, item, by_slug):
     path = f"column/{slug}/"
     url = site["base_url"] + path
     crumb = plain(a["breadcrumb"])
+    cat = category_map(site).get(a.get("category"))
     op = operator_of(item)
     modified = last_modified(item)
     article_ld = {"@context": "https://schema.org", "@type": "Article", "headline": a["title"], "description": a["description"],
                   "datePublished": date, "dateModified": modified, "mainEntityOfPage": url,
                   "author": {"@type": "Organization", "name": site["author"]},
-                  "publisher": {"@type": "Organization", "name": site["site_name"]}}
+                  "publisher": {"@type": "Organization", "name": site["site_name"],
+                                "logo": {"@type": "ImageObject", "url": site["base_url"] + LOGO}}}
     if op:
         article_ld["contributor"] = {"@type": "Person", "name": site["operator"], "url": site["base_url"] + "about.html"}
-        if op.get("photos"):
-            article_ld["image"] = [site["base_url"] + ph["src"] for ph in op["photos"]]
+    photos = (op or {}).get("photos", [])
+    article_ld["image"] = [site["base_url"] + ph["src"] for ph in photos] or [site["base_url"] + OGP["path"]]
+    og_image = ({"url": site["base_url"] + photos[0]["src"], "width": photos[0].get("width"), "height": photos[0].get("height")}
+                if photos else None)
+    crumbs = [("ホーム", site["base_url"], "../../")]
+    if cat:
+        crumbs.append((cat["name"], site["base_url"] + f"category/{cat['slug']}/", f"../../category/{cat['slug']}/"))
+    crumbs.append((crumb, url, None))
     lds = [
         article_ld,
         {"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [
-            {"@type": "ListItem", "position": 1, "name": "ホーム", "item": site["base_url"]},
-            {"@type": "ListItem", "position": 2, "name": crumb, "item": url}]},
+            {"@type": "ListItem", "position": i, "name": n, "item": u} for i, (n, u, _) in enumerate(crumbs, 1)]},
         {"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
             {"@type": "Question", "name": plain(f["q"]), "acceptedAnswer": {"@type": "Answer", "text": plain(f["a"])}}
             for f in a["faq"]]},
@@ -199,7 +224,7 @@ def render_article(site, item, by_slug):
     else:
         human, byline_extra, operator_html = "人による実際の試飲や器具のテストは行っていません。", "", ""
     body = f"""<div class="wrap article-wrap">
-<nav class="breadcrumb" aria-label="パンくずリスト"><ol><li><a href="../../index.html">ホーム</a></li><li>{e(crumb)}</li></ol></nav>
+<nav class="breadcrumb" aria-label="パンくずリスト"><ol>{"".join(f'<li><a href="{h}">{e(n)}</a></li>' if h else f'<li>{e(n)}</li>' for n, _, h in crumbs)}</ol></nav>
 <article class="article">
 <p class="meta">公開日：{jp_date(date)}　最終更新日：{jp_date(modified)}　作成：{e(site["author"])}（生成AI）{byline_extra}</p>
 <h1>{e(a["title"])}</h1>
@@ -223,7 +248,7 @@ def render_article(site, item, by_slug):
 </article>
 </div>"""
     return layout(site, title=a["title"], description=a["description"], rel="../../", path=path, body=body,
-                  page_type="article", extra_head="\n".join(ld(x) for x in lds) + "\n")
+                  page_type="article", extra_head="\n".join(ld(x) for x in lds) + "\n", image=og_image)
 
 
 def article_list(items, rel=""):
@@ -233,6 +258,37 @@ def article_list(items, rel=""):
         f'<li><a href="{rel}column/{it["slug"]}/"><span class="card-title">{e(it["article"]["title"])}</span>'
         f'<span class="card-desc">{e(it["article"]["description"])}</span>'
         f'<span class="card-date">{jp_date(it["date"])}</span></a></li>' for it in items) + "</ul>"
+
+
+def group_by_category(site, items):
+    cats = category_map(site)
+    groups = {}
+    for it in items:
+        c = it["article"].get("category")
+        if c in cats:
+            groups.setdefault(c, []).append(it)
+    return [(cats[c["slug"]], groups[c["slug"]]) for c in site.get("categories", []) if c["slug"] in groups]
+
+
+def category_nav(site, items):
+    groups = group_by_category(site, items)
+    if not groups:
+        return ""
+    lis = "".join(f'<li><a href="category/{c["slug"]}/">{e(c["name"])}<span>{len(its)}本</span></a></li>' for c, its in groups)
+    return f'<section id="categories">\n  <h2>カテゴリ</h2>\n  <ul class="cat-list">{lis}</ul>\n</section>\n'
+
+
+def render_category(site, cat, items):
+    path = f"category/{cat['slug']}/"
+    crumb_ld = {"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [
+        {"@type": "ListItem", "position": 1, "name": "ホーム", "item": site["base_url"]},
+        {"@type": "ListItem", "position": 2, "name": cat["name"], "item": site["base_url"] + path}]}
+    body = ('<div class="wrap article-wrap"><nav class="breadcrumb" aria-label="パンくずリスト"><ol>'
+            f'<li><a href="../../">ホーム</a></li><li>{e(cat["name"])}</li></ol></nav>'
+            f'<h1>{e(cat["name"])}の記事</h1><p>{e(cat.get("description", ""))}</p>\n'
+            f'{article_list(items, rel="../../")}</div>')
+    return layout(site, title=f"{cat['name']}の記事", description=f"{cat['name']}の記事一覧。{cat.get('description', '')}",
+                  rel="../../", path=path, body=body, extra_head=ld(crumb_ld) + "\n")
 
 
 def render_index(site, items):
@@ -250,7 +306,7 @@ def render_index(site, items):
   <p>ハンドドリップを始めたばかりの人や、家のコーヒーをもう少しおいしくしたい人に向けて、淹れ方・豆・器具の基本をまとめています。</p>
   <p>記事は生成AIで作成しています。数値や制度に関わる記述は、公的機関や業界団体などの出典ページと自動で照合し、出典を記事末にまとめています。</p>
 </section>
-<section id="articles">
+{category_nav(site, items)}<section id="articles">
   <h2>新着記事</h2>
   {article_list(items[:3])}
   <h2 id="all-articles">すべての記事</h2>
@@ -263,7 +319,7 @@ def render_index(site, items):
 
 def static_page(site, title, path, paragraphs):
     body = ('<div class="wrap article-wrap"><nav class="breadcrumb" aria-label="パンくずリスト"><ol>'
-            f'<li><a href="index.html">ホーム</a></li><li>{e(title)}</li></ol></nav><article class="article">'
+            f'<li><a href="./">ホーム</a></li><li>{e(title)}</li></ol></nav><article class="article">'
             f"<h1>{e(title)}</h1>" + "".join(paragraphs) + "</article></div>")
     return layout(site, title=title, description=f"{site['site_name']}の{title}です。", rel="", path=path, body=body)
 
@@ -305,7 +361,11 @@ def build():
                              body=f'<div class="wrap article-wrap"><h1>ページが見つかりません</h1><p><a href="{root_path}">トップページへ戻る</a></p></div>')
     for it in items:
         out[f"column/{it['slug']}/index.html"] = render_article(site, it, by_slug)
+    groups = group_by_category(site, items)
+    for cat, its in groups:
+        out[f"category/{cat['slug']}/index.html"] = render_category(site, cat, its)
     urls = [("", items[0]["date"] if items else None), ("about.html", None), ("privacy.html", None), ("disclaimer.html", None)]
+    urls += [(f"category/{cat['slug']}/", max(last_modified(it) for it in its)) for cat, its in groups]
     urls += [(f"column/{it['slug']}/", last_modified(it)) for it in items]
     sm = ['<?xml version="1.0" encoding="UTF-8"?>', '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
     for path, lastmod in urls:
@@ -314,14 +374,16 @@ def build():
     out["sitemap.xml"] = "\n".join(sm) + "\n"
     out["robots.txt"] = f"User-agent: *\nAllow: /\n\nSitemap: {site['base_url']}sitemap.xml\n"
 
-    # 記事JSONが消えたページを掃除
-    col = ROOT / "column"
-    if col.exists():
-        for d in col.iterdir():
-            if d.is_dir() and d.name not in by_slug:
-                for f in d.iterdir():
-                    f.unlink()
-                d.rmdir()
+    # 記事JSONが消えたページ・記事がなくなったカテゴリを掃除
+    keep = {"column": set(by_slug), "category": {cat["slug"] for cat, _ in groups}}
+    for top, names in keep.items():
+        base = ROOT / top
+        if base.exists():
+            for d in base.iterdir():
+                if d.is_dir() and d.name not in names:
+                    for f in d.iterdir():
+                        f.unlink()
+                    d.rmdir()
     for rel, text in out.items():
         path = ROOT / rel
         path.parent.mkdir(parents=True, exist_ok=True)

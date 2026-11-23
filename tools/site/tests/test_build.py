@@ -117,6 +117,68 @@ class BuildTest(unittest.TestCase):
         self.build()
         self.assertNotIn("運営者について", self.page("about.html"))
 
+    # ---------------------------------------------------------------- カテゴリ・内部リンク・OGP
+    def test_category_page_and_breadcrumb(self):
+        self.add_article()
+        self.build()
+        cat = self.page("category/brew/index.html")
+        self.assertIn("<h1>淹れ方の記事</h1>", cat)
+        self.assertIn(f'href="../../column/{SLUG}/"', cat)
+        page = self.page(f"column/{SLUG}/index.html")
+        self.assertIn('<li><a href="../../">ホーム</a></li><li><a href="../../category/brew/">淹れ方</a></li>', page)
+        crumbs = [json.loads(m.group(1)) for m in re.finditer(r'<script type="application/ld\+json">(.*?)</script>', page, re.S)]
+        crumbs = next(c for c in crumbs if c["@type"] == "BreadcrumbList")
+        self.assertEqual([x["name"] for x in crumbs["itemListElement"]], ["ホーム", "淹れ方", "粉の量の目安"])
+        self.assertIn("category/brew/</loc>", self.page("sitemap.xml"))
+        self.assertIn('href="category/brew/"', self.page("index.html"))
+        self.assert_check_ok()
+
+    def test_published_files_include_every_linked_page(self):
+        self.add_article()
+        self.build()
+        pub = self.tmp / "pub"
+        subprocess.run(["bash", str(self.site / "tools/site/collect_public.sh"), str(pub)], check=True, env=self.env)
+        ok = subprocess.run([sys.executable, str(self.site / "tools/site/check_public.py"), str(pub)], env=self.env,
+                            capture_output=True, text=True)
+        self.assertEqual(ok.returncode, 0, ok.stdout)
+        self.assertTrue((pub / "category/brew/index.html").exists())
+        shutil.rmtree(pub / "category")  # 以前の deploy.yml のように category/ を集め忘れた場合
+        ng = subprocess.run([sys.executable, str(self.site / "tools/site/check_public.py"), str(pub)], env=self.env,
+                            capture_output=True, text=True)
+        self.assertEqual(ng.returncode, 1, ng.stdout)
+        self.assertIn("公開物にない", ng.stdout)
+
+    def test_full_width_breadcrumb_passes_check(self):
+        art = sample_article()
+        art["breadcrumb"] = "粉の量（1杯分）"
+        self.add_article(article=art)
+        self.build()
+        self.assert_check_ok()
+
+    def test_no_category_pages_without_articles(self):
+        self.build()
+        self.assertFalse((self.site / "category").exists())
+        self.assertNotIn("カテゴリ", self.page("index.html"))
+
+    def test_link_in_body_rendered(self):
+        art = sample_article()
+        art["lead"] += "落ちるのが遅いときは[[slow-drip-fix|ドリップが遅いときの直し方]]も参考になります。"
+        self.add_article(article=art)
+        other = dict(json.loads((self.site / f"content/articles/{SLUG}.json").read_text(encoding="utf-8")), slug="slow-drip-fix")
+        other["article"] = dict(other["article"], title="ドリップが遅いときの直し方", breadcrumb="遅いとき")
+        (self.site / "content/articles/slow-drip-fix.json").write_text(json.dumps(other, ensure_ascii=False), encoding="utf-8")
+        self.build()
+        page = self.page(f"column/{SLUG}/index.html")
+        self.assertIn('<a href="../slow-drip-fix/">ドリップが遅いときの直し方</a>', page)
+        self.assertNotIn("[[", page)
+        self.assert_check_ok()
+
+    def test_home_links_point_to_directory(self):
+        self.build()
+        about = self.page("about.html")
+        self.assertNotIn('href="index.html', about)
+        self.assertIn('<a href="./">ホーム</a>', about)
+
     # ---------------------------------------------------------------- 確認メモ・写真
     def test_article_without_operator_note_keeps_ai_notice(self):
         self.add_article()
@@ -124,7 +186,9 @@ class BuildTest(unittest.TestCase):
         page = self.page(f"column/{SLUG}/index.html")
         self.assertIn("人による実際の試飲や器具のテストは行っていません", page)
         self.assertNotIn('class="operator-note"', page)
-        self.assertNotIn("image", self.article_ld())
+        # 写真がないときはサイト共通のOGP画像を使う
+        self.assertEqual(self.article_ld()["image"], ["https://tfqys680-jpg.github.io/home-coffee-guide/images/ogp.png"])
+        self.assertIn('<meta property="og:image" content="https://tfqys680-jpg.github.io/home-coffee-guide/images/ogp.png">', page)
         self.assert_check_ok()
 
     def test_operator_note_and_photo_rendered(self):
@@ -146,6 +210,7 @@ class BuildTest(unittest.TestCase):
         self.assertIn("それ以外の本文", page)
         ld = self.article_ld()
         self.assertEqual(ld["image"], ["https://tfqys680-jpg.github.io/home-coffee-guide/" + src])
+        self.assertIn(f'<meta property="og:image" content="https://tfqys680-jpg.github.io/home-coffee-guide/{src}">', page)
         self.assertEqual(ld["dateModified"], "2026-11-22")
         self.assertEqual(ld["contributor"]["@type"], "Person")
         self.assertIn(f"column/{SLUG}/</loc><lastmod>2026-11-22</lastmod>", self.page("sitemap.xml"))
@@ -162,6 +227,16 @@ class BuildTest(unittest.TestCase):
         self.add_article(article=art)
         self.build()
         self.assert_check_fails("禁止表現「私が」")
+
+    def test_invisible_characters_cannot_hide_banned_phrases(self):
+        art = sample_article()
+        art["lead"] = "毎日飲むと" + "\u200b".join("脂肪燃焼") + "につながります。"
+        self.add_article(article=art)
+        self.build()
+        p = self.check()
+        self.assertEqual(p.returncode, 1, p.stdout)
+        self.assertIn("禁止表現「脂肪燃焼」", p.stdout)
+        self.assertIn("見えない文字", p.stdout)
 
     def test_missing_photo_file_rejected(self):
         self.add_article(operator={"checked": "2026-11-22", "notes": ["メモ"],
