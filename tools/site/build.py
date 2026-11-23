@@ -54,6 +54,9 @@ def layout(site, *, title, description, rel, path, body, page_type="website", ex
               f"<script>window.dataLayer=window.dataLayer||[];function gtag(){{dataLayer.push(arguments);}}"
               f"gtag('js',new Date());gtag('config','{site['ga_id']}');</script>\n")
     robots = '<meta name="robots" content="noindex">\n' if noindex else ""
+    # Search Console の所有権確認（HTMLタグ方式）。site.json の gsc_verification が空なら出力しない
+    verify = (f'<meta name="google-site-verification" content="{e(site["gsc_verification"])}">\n'
+              if site.get("gsc_verification") else "")
     return f"""<!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -61,7 +64,7 @@ def layout(site, *, title, description, rel, path, body, page_type="website", ex
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 {ga}<title>{e(full_title)}</title>
 <meta name="description" content="{e(description)}">
-{robots}<link rel="canonical" href="{url}">
+{verify}{robots}<link rel="canonical" href="{url}">
 <meta property="og:type" content="{page_type}">
 <meta property="og:title" content="{e(title)}">
 <meta property="og:description" content="{e(description)}">
@@ -124,16 +127,50 @@ def render_block(b):
     return ""
 
 
+def operator_of(item):
+    """運営者本人が書いた確認メモ・写真（item["operator"]）。メモも写真もなければ None。"""
+    op = item.get("operator") or {}
+    return op if (op.get("notes") or op.get("photos")) else None
+
+
+def last_modified(item):
+    dates = [item.get("updated", item["date"])]
+    op = operator_of(item)
+    if op and op.get("checked"):
+        dates.append(op["checked"])
+    return max(dates)
+
+
+def render_operator(site, op, rel):
+    figs = []
+    for i, ph in enumerate(op.get("photos", [])):
+        size = "".join(f' {k}="{int(ph[k])}"' for k in ("width", "height") if ph.get(k))
+        lazy = ' loading="lazy"' if i else ""  # 1枚目は上部に出るので遅延読み込みしない
+        cap = f'<figcaption>{e(ph["caption"])}</figcaption>' if ph.get("caption") else ""
+        figs.append(f'<figure><img src="{rel}{e(ph["src"])}" alt="{e(ph.get("alt", ""))}"{size}{lazy} decoding="async">{cap}</figure>')
+    when = f"（{jp_date(op['checked'])}・{e(site['operator'])}）" if op.get("checked") else f"（{e(site['operator'])}）"
+    notes = "".join(f"<p>{e(n)}</p>" for n in op.get("notes", []))
+    return (f'<aside class="operator-note" aria-label="運営者の確認メモ"><p class="operator-label">運営者の確認メモ{when}</p>'
+            f'{notes}{"".join(figs)}</aside>')
+
+
 def render_article(site, item, by_slug):
     a, slug, date = item["article"], item["slug"], item["date"]
     path = f"column/{slug}/"
     url = site["base_url"] + path
     crumb = plain(a["breadcrumb"])
+    op = operator_of(item)
+    modified = last_modified(item)
+    article_ld = {"@context": "https://schema.org", "@type": "Article", "headline": a["title"], "description": a["description"],
+                  "datePublished": date, "dateModified": modified, "mainEntityOfPage": url,
+                  "author": {"@type": "Organization", "name": site["author"]},
+                  "publisher": {"@type": "Organization", "name": site["site_name"]}}
+    if op:
+        article_ld["contributor"] = {"@type": "Person", "name": site["operator"], "url": site["base_url"] + "about.html"}
+        if op.get("photos"):
+            article_ld["image"] = [site["base_url"] + ph["src"] for ph in op["photos"]]
     lds = [
-        {"@context": "https://schema.org", "@type": "Article", "headline": a["title"], "description": a["description"],
-         "datePublished": date, "dateModified": item.get("updated", date), "mainEntityOfPage": url,
-         "author": {"@type": "Organization", "name": site["author"]},
-         "publisher": {"@type": "Organization", "name": site["site_name"]}},
+        article_ld,
         {"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [
             {"@type": "ListItem", "position": 1, "name": "ホーム", "item": site["base_url"]},
             {"@type": "ListItem", "position": 2, "name": crumb, "item": url}]},
@@ -154,12 +191,19 @@ def render_article(site, item, by_slug):
                      for i, s in enumerate(a["sources"], 1))
     notice = {"中": "健康や表示に関わる内容を含みます。体質や持病がある方は医師などに相談してください。",
               "高": "健康に関わる内容を含みます。体質や持病がある方、妊娠中・服薬中の方は医師に相談してください。"}.get(item.get("ymyl"), "")
+    if op:
+        human = (f"「運営者の確認メモ」は運営者（{e(site['operator'])}）が自分で確かめて書いたものです。"
+                 "それ以外の本文について、人による試飲や器具のテストは行っていません。")
+        byline_extra = f"　確認メモ：{e(site['operator'])}"
+        operator_html = "\n" + render_operator(site, op, "../../")
+    else:
+        human, byline_extra, operator_html = "人による実際の試飲や器具のテストは行っていません。", "", ""
     body = f"""<div class="wrap article-wrap">
 <nav class="breadcrumb" aria-label="パンくずリスト"><ol><li><a href="../../index.html">ホーム</a></li><li>{e(crumb)}</li></ol></nav>
 <article class="article">
-<p class="meta">公開日：{jp_date(date)}　最終更新日：{jp_date(item.get("updated", date))}　作成：{e(site["author"])}（生成AI）</p>
+<p class="meta">公開日：{jp_date(date)}　最終更新日：{jp_date(modified)}　作成：{e(site["author"])}（生成AI）{byline_extra}</p>
 <h1>{e(a["title"])}</h1>
-<div class="ai-note">この記事は生成AI（ChatGPT）で下書きし、別の生成AI（Claude）が出典ページの本文と照合・推敲して公開しました。{e(notice)}人による実際の試飲や器具のテストは行っていません。</div>
+<div class="ai-note">この記事は生成AI（ChatGPT）で下書きし、別の生成AI（Claude）が出典ページの本文と照合・推敲して公開しました。{e(notice)}{human}</div>{operator_html}
 <div class="summary"><p class="summary-label">結論</p><p>{inline(a["conclusion"])}</p></div>
 <p>{inline(a["lead"])}</p>
 <h2 id="can-do">この記事でわかること</h2><ul class="check">{"".join(f"<li>{inline(x)}</li>" for x in a["can_do"])}</ul>
@@ -239,6 +283,8 @@ def build():
     out = {"index.html": render_index(site, items)}
     out["about.html"] = static_page(site, "運営者情報", "about.html", [
         h2("サイトについて"), p(f"{site['site_name']}は、家でコーヒーを淹れる人のための情報サイトです。個人（{site['operator']}）が運営しています。"),
+        # 運営者本人が書く紹介文（site.json の operator_profile）。空なら見出しごと出さない
+        *([h2("運営者について")] + [p(x) for x in site.get("operator_profile", [])] if site.get("operator_profile") else []),
         h2("記事の作り方"),
         p("記事は、生成AI（ChatGPT）が下書きを作り、別の生成AI（Claude）が出典ページの本文と照合して推敲したうえで、自動で公開しています。"),
         p("運営者や専門家による実際の試飲・器具のテスト・個別の確認は行っていません。記事内の体験談のような表現は使わない方針です。"),
@@ -260,7 +306,7 @@ def build():
     for it in items:
         out[f"column/{it['slug']}/index.html"] = render_article(site, it, by_slug)
     urls = [("", items[0]["date"] if items else None), ("about.html", None), ("privacy.html", None), ("disclaimer.html", None)]
-    urls += [(f"column/{it['slug']}/", it.get("updated", it["date"])) for it in items]
+    urls += [(f"column/{it['slug']}/", last_modified(it)) for it in items]
     sm = ['<?xml version="1.0" encoding="UTF-8"?>', '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
     for path, lastmod in urls:
         sm.append(f"  <url><loc>{site['base_url']}{path}</loc>" + (f"<lastmod>{lastmod}</lastmod>" if lastmod else "") + "</url>")

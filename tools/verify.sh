@@ -17,3 +17,6 @@ python3 tools/site/check.py
 
 echo "== pipeline tests =="
 python3 tools/auto-publish/tests/test_pipeline.py
+
+echo "== build tests =="
+python3 tools/site/tests/test_build.py
