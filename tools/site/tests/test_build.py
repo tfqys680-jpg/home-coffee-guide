@@ -206,6 +206,16 @@ class BuildTest(unittest.TestCase):
         self.build()
         self.assert_check_fails("禁止表現「私が」")
 
+    def test_invisible_characters_cannot_hide_banned_phrases(self):
+        art = sample_article()
+        art["lead"] = "毎日飲むと" + "\u200b".join("脂肪燃焼") + "につながります。"
+        self.add_article(article=art)
+        self.build()
+        p = self.check()
+        self.assertEqual(p.returncode, 1, p.stdout)
+        self.assertIn("禁止表現「脂肪燃焼」", p.stdout)
+        self.assertIn("見えない文字", p.stdout)
+
     def test_missing_photo_file_rejected(self):
         self.add_article(operator={"checked": "2026-11-22", "notes": ["メモ"],
                                    "photos": [{"src": f"images/articles/{SLUG}/none.jpg", "alt": "写真",

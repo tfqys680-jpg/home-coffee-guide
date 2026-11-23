@@ -247,7 +247,9 @@ def validate(article, cfg, existing_slugs):
     for n in {int(x) for x in re.findall(r"\[(\d+)\]", text)}:
         if not 1 <= n <= len(sources):
             errs.append(f"存在しない出典番号 [{n}]")
-    checked = text.replace("必ずしも", "")
+    if article_quality.has_invisible(article):
+        errs.append("見えない文字（ゼロ幅スペースなど）が含まれる")
+    checked = article_quality.clean(text).replace("必ずしも", "")
     for phrase in cfg["banned_phrases"]:
         if phrase in checked:
             errs.append(f"禁止表現: {phrase}")

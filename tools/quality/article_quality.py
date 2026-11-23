@@ -12,6 +12,11 @@ pipeline.py が公開前に呼び、tools/verify.sh が公開済みの全記事�
 - 単位つきの数値に出典番号 [n] が付いている
 - 既存記事と本文が似すぎていない（文字3-gramのJaccard係数）、H2見出しが重複しない
 - 中身の薄いH2セクションが続かない
+- 事実の裏付けがある（出典つきの記述が4か所以上・出典2種以上、数値も出典も手順もないH2が半数以下）
+- 表と手順に中身がある（空・ダッシュ・「人による」だけの表、同じ値が並ぶ列、空の手順を認めない）
+- あいまい表現や主キーワードの詰め込みが多すぎない
+- 既存記事と同じ文・ほぼ同じ文・同じ数値の組み合わせを使い回していない
+- 見えない文字（ゼロ幅スペースなど）で判定をすり抜けない（NFKC正規化してから判定）
 
 使い方:
   python3 tools/quality/article_quality.py --all            # 公開済みの全記事を判定（不合格があれば終了コード1）
@@ -22,6 +27,7 @@ import json
 import os
 import re
 import sys
+import unicodedata
 from pathlib import Path
 
 ROOT = Path(os.environ.get("SITE_ROOT", Path(__file__).resolve().parents[2]))
@@ -33,15 +39,41 @@ HARD_FILLERS = ("いかがでしたか", "いかがでしたでしょうか", "�
 SOFT_FILLERS = ("様々な", "さまざまな", "ぜひ", "大切です", "重要です", "ポイントです", "おすすめです", "魅力",
                 "楽しみ方", "参考にしてください", "してみてください", "と言えるでしょう", "ではないでしょうか")
 SOFT_FILLER_MAX_PER_1000 = 2.0
-SIMILARITY_ERROR = 0.40
-SIMILARITY_WARN = 0.30
-UNIT = r"(?:g|グラム|mg|ml|mL|ミリリットル|cc|℃|度|分|秒|時間|日|週間|か月|ヶ月|カ月|%|％)"
-NUMBER_WITH_UNIT = re.compile(r"\d+(?:\.\d+)?\s*(?:[〜～\-]\s*\d+(?:\.\d+)?)?\s*" + UNIT + r"(?![a-zA-Z])")
+# あいまいで情報のない言い回し（1,000字あたり3回まで）
+HEDGES = ("人によって", "人それぞれ", "好みによる", "好みによって", "好みや使い方", "場合による", "状況に合わせ", "その時々",
+          "無理なく", "無理のない", "自分に合", "自分なり", "少しずつ", "大事になります", "欠かせません", "よいでしょう",
+          "柔軟", "前向き", "気持ちよく", "満足し", "意味がある", "答えは一つではない", "唯一の答え", "正解は一つ")
+HEDGE_MAX_PER_1000 = 3.0
+VAGUE_CELLS = {"", "—", "-", "–", "―", "なし", "特になし", "人による", "好みによる", "場合による", "状況による", "状況次第",
+               "いろいろ", "さまざま", "様々"}
+SIMILARITY_ERROR = 0.30
+SIMILARITY_WARN = 0.22
+UNIT = (r"(?:g|グラム|mg|ml|mL|ミリリットル|cc|℃|°C|°|度|分|秒|時間|日|週間|か月|ヶ月|カ月|%|L|リットル|cm|mm|倍|kcal|円)")
+NUMBER_WITH_UNIT = re.compile(r"\d+(?:\.\d+)?\s*(?:[〜～~\-]\s*\d+(?:\.\d+)?)?\s*" + UNIT + r"(?![a-zA-Z])")
 CITE = re.compile(r"\[\d+\]")
 LINK = re.compile(r"\[\[[^|\]]+\|([^\]]+)\]\]")  # 本文内の記事リンク [[slug|リンク文]]
 
 
 # ---------------------------------------------------------------- text helpers
+
+def clean(s):
+    """NFKC正規化し、ゼロ幅スペースなどの書式文字（Unicode Cf）を取り除く。"""
+    return "".join(ch for ch in unicodedata.normalize("NFKC", str(s)) if unicodedata.category(ch) != "Cf")
+
+
+def deep(o, f):
+    if isinstance(o, str):
+        return f(o)
+    if isinstance(o, list):
+        return [deep(x, f) for x in o]
+    if isinstance(o, dict):
+        return {k: deep(v, f) for k, v in o.items()}
+    return o
+
+
+def has_invisible(o):
+    return any(unicodedata.category(ch) == "Cf" for ch in json.dumps(o, ensure_ascii=False))
+
 
 def strip_cites(s):
     """出典番号を消し、記事リンクはリンク文だけにする。"""
@@ -122,9 +154,52 @@ def allowed_missing(toks):
 
 # ---------------------------------------------------------------- the gate
 
-def evaluate(article, main_kw="", sub_kw="", existing=(), categories=None):
-    """article: 記事本体（item["article"]）。existing: 比べる既存記事の本体のリスト（自分を含めない）。"""
+def section_text(s):
+    return " ".join(str(b.get("text", "")) + " " + " ".join(map(str, b.get("items", []))) + " "
+                    + " ".join(map(str, b.get("lines", []))) + " " + " ".join(" ".join(map(str, r)) for r in b.get("rows", []))
+                    for b in s.get("blocks", []))
+
+
+def anchored(s):
+    """数値・出典・3項目以上の具体的なリストのどれかがあるH2か。"""
+    t = section_text(s)
+    if CITE.search(t) or re.search(r"\d", t):
+        return True
+    return any(b.get("type") in ("ol", "ul") and len([i for i in b.get("items", []) if len(norm(i)) >= 8]) >= 3
+               for b in s.get("blocks", []))
+
+
+def informative_table(b):
+    rows = [[norm(c) for c in r] for r in b.get("rows", [])]
+    if len(rows) < 3 or len({tuple(r) for r in rows}) < len(rows):
+        return False
+    if any(len(c) < 2 or c in VAGUE_CELLS for r in rows for c in r):
+        return False
+    if any(len(set(col)) == 1 for col in list(zip(*rows))[1:]):
+        return False
+    return sum(1 for r in b.get("rows", []) if re.search(r"\d|\[\d+\]", " ".join(map(str, r)))) >= 2
+
+
+def long_sentences(article):
+    out = []
+    for u in body_units(article):
+        out += [norm(s) for s in sentences(u) if len(norm(s)) >= 15]
+    return out
+
+
+def numbers_of(article):
+    return {re.sub(r"\s", "", x.group(0)) for u in body_units(article) for x in NUMBER_WITH_UNIT.finditer(strip_cites(u))}
+
+
+def evaluate(article, main_kw="", sub_kw="", existing=(), categories=None, limits=None):
+    """article: 記事本体（item["article"]）。existing: 比べる既存記事の本体のリスト（自分を含めない）。
+    limits: {"min_chars": int, "h2": (min, max), "faq": (min, max)}（公開済み記事の検査で使う）"""
     errors, warnings, metrics = [], [], {}
+    if has_invisible(article):
+        errors.append("見えない文字（ゼロ幅スペースなど）が含まれる")
+    article = deep(article, clean)
+    existing = [deep(o, clean) for o in existing]
+    main_kw, sub_kw = clean(main_kw), clean(sub_kw)
 
     # 形式・カテゴリ
     fmt = article.get("format")
@@ -140,6 +215,12 @@ def evaluate(article, main_kw="", sub_kw="", existing=(), categories=None):
         errors.append("早見表か比較表（3行以上の表）がない")
     if fmt == "手順" and not any(len(b.get("items", [])) >= 4 for b in ols):
         errors.append("形式=手順なのに、4手順以上の番号付きリストがない")
+    elif fmt == "手順" and not any(len(b.get("items", [])) >= 4 and all(len(norm(i)) >= 8 for i in b["items"])
+                                  and len({norm(i) for i in b["items"]}) == len(b["items"]) for b in ols):
+        errors.append("番号付きの手順の中身が空・短すぎる（8字未満）・重複している")
+    metrics["informative_tables"] = sum(informative_table(b) for b in big_tables)
+    if big_tables and not metrics["informative_tables"]:
+        errors.append("3行以上の表に中身がない（空欄・ダッシュ・「人による」だけ、同じ値が並ぶ列、数値も出典もない行ばかり）")
     if fmt == "比較" and not any(len(b.get("headers", [])) >= 3 for b in big_tables):
         errors.append("形式=比較なのに、3列以上・3行以上の比較表がない")
     if fmt == "トラブル解決" and not any(any("原因" in str(h) for h in b.get("headers", [])) for b in big_tables):
@@ -196,6 +277,20 @@ def evaluate(article, main_kw="", sub_kw="", existing=(), categories=None):
         errors.append(f"決まり文句が多い（1,000字あたり{per1000:.1f}回、上限{SOFT_FILLER_MAX_PER_1000}回）")
     elif per1000 > SOFT_FILLER_MAX_PER_1000 / 2:
         warnings.append(f"決まり文句がやや多い（1,000字あたり{per1000:.1f}回）")
+    hedge = sum(text.count(h) for h in HEDGES) / max(chars, 1) * 1000
+    metrics["hedge_per_1000"] = round(hedge, 2)
+    if hedge > HEDGE_MAX_PER_1000:
+        errors.append(f"あいまいな言い回しが多い（1,000字あたり{hedge:.1f}回、上限{HEDGE_MAX_PER_1000}回）")
+    toks = [t for t in main if len(t) >= 2]
+    if toks:
+        dens = {t: text.count(t) / max(chars, 1) * 1000 for t in toks}
+        sents_all = sentences(text)
+        share = sum(1 for x in sents_all if all(t in x for t in toks)) / max(len(sents_all), 1)
+        title_rep = max(title.count(t) for t in toks)
+        metrics["keyword_max_per_1000"] = round(max(dens.values()), 1)
+        if max(dens.values()) > 30 or share >= 0.4 or title_rep > 2:
+            errors.append(f"主キーワードの詰め込み（1,000字あたり最大{max(dens.values()):.0f}回、"
+                          f"全語を含む文の割合{share:.0%}、タイトル内の繰り返し{title_rep}回）")
 
     # 数値の出典
     uncited = []
@@ -207,6 +302,19 @@ def evaluate(article, main_kw="", sub_kw="", existing=(), categories=None):
     if uncited:
         errors.append(f"出典番号のない数値が{len(uncited)}か所: 「{uncited[0]}」など")
     metrics["citations"] = len(CITE.findall(json.dumps(article, ensure_ascii=False)))
+    units = body_units(article)
+    cited_units = [u for u in units if CITE.search(u)]
+    cited_ids = {int(x) for u in units for x in re.findall(r"\[(\d+)\]", u)}
+    metrics["cited_units"], metrics["sources_cited"] = len(cited_units), len(cited_ids)
+    if len(cited_units) < 4 or len(cited_ids) < 2:
+        errors.append(f"出典で裏付けた記述が少ない（{len(cited_units)}か所・出典{len(cited_ids)}種。4か所以上・2種以上必要）")
+    bad_ids = sorted(i for i in cited_ids if not 1 <= i <= len(article.get("sources", [])))
+    if bad_ids:
+        errors.append(f"存在しない出典番号 {bad_ids}")
+    loose = [s.get("heading", "") for s in article.get("sections", []) if not anchored(s)]
+    metrics["unanchored_h2"] = len(loose)
+    if len(loose) * 2 > len(article.get("sections", [])):
+        errors.append(f"数値・出典・具体的な手順のないH2が半数を超える（{len(loose)}/{len(article.get('sections', []))}）")
 
     # 薄いセクション
     thin = []
@@ -224,12 +332,29 @@ def evaluate(article, main_kw="", sub_kw="", existing=(), categories=None):
     # 既存記事との類似
     mine = trigrams(text)
     my_heads = {norm(h) for h in (s.get("heading", "") for s in article.get("sections", [])) if norm(h)}
+    my_sents, my_nums = long_sentences(article), numbers_of(article)
     best, best_title, head_dups = 0.0, "", 0
+    reuse = {"same_sentences": 0, "near_sentence_share": 0.0, "number_overlap": 0.0}
     for other in existing:
         sim = jaccard(mine, trigrams(full_text(other)))
         if sim > best:
             best, best_title = sim, other.get("title", "")
         head_dups = max(head_dups, len(my_heads & {norm(s.get("heading", "")) for s in other.get("sections", [])}))
+        theirs = set(long_sentences(other))
+        reuse["same_sentences"] = max(reuse["same_sentences"], sum(1 for x in my_sents if x in theirs))
+        their_tri = [trigrams(x) for x in theirs]
+        near = sum(1 for x in my_sents if max((jaccard(trigrams(x), t) for t in their_tri), default=0) >= 0.5)
+        reuse["near_sentence_share"] = max(reuse["near_sentence_share"], round(near / max(len(my_sents), 1), 2))
+        o_nums = numbers_of(other)
+        if len(my_nums) >= 3 and len(o_nums) >= 3:
+            reuse["number_overlap"] = max(reuse["number_overlap"], round(len(my_nums & o_nums) / len(my_nums | o_nums), 2))
+    metrics.update(reuse)
+    if reuse["same_sentences"] >= 3:
+        errors.append(f"既存記事と同じ文を{reuse['same_sentences']}文使い回している")
+    if reuse["near_sentence_share"] >= 0.2:
+        errors.append(f"既存記事の言い換えに近い文が{reuse['near_sentence_share']:.0%}ある")
+    if reuse["number_overlap"] >= 0.5:
+        errors.append(f"既存記事と数値の組み合わせがほぼ同じ（重なり{reuse['number_overlap']}）")
     metrics["max_similarity"] = round(best, 3)
     if best >= SIMILARITY_ERROR:
         errors.append(f"既存記事「{best_title}」と本文が似すぎている（類似度{best:.2f}、上限{SIMILARITY_ERROR}）")
@@ -241,6 +366,15 @@ def evaluate(article, main_kw="", sub_kw="", existing=(), categories=None):
         warnings.append("既存記事と同じH2見出しが1つある")
 
     metrics["chars"] = chars
+    if limits:
+        if chars < limits.get("min_chars", 0):
+            errors.append(f"本文が短すぎる（{chars}字、{limits['min_chars']}字以上）")
+        lo, hi = limits.get("h2", (0, 99))
+        if not lo <= len(article.get("sections", [])) <= hi:
+            errors.append(f"H2の数が{lo}〜{hi}の範囲外")
+        lo, hi = limits.get("faq", (0, 99))
+        if not lo <= len(article.get("faq", [])) <= hi:
+            errors.append(f"FAQの数が{lo}〜{hi}の範囲外")
     return {"pass": not errors, "errors": errors, "warnings": warnings, "metrics": metrics}
 
 
@@ -255,9 +389,15 @@ def site_categories():
     return [c["slug"] for c in site.get("categories", [])]
 
 
-def evaluate_item(item, items, categories):
+def published_limits():
+    """公開済み記事の検査用。パイプラインの文字数下限（数え方の差を見込んで9割）とH2・FAQの数。"""
+    cfg = json.loads((ROOT / "tools/auto-publish/config.json").read_text(encoding="utf-8"))
+    return {"min_chars": int(cfg["min_body_chars"] * 0.9), "h2": (4, 9), "faq": (3, 6)}
+
+
+def evaluate_item(item, items, categories, limits=None):
     others = [i["article"] for i in items if i["slug"] != item["slug"]]
-    return evaluate(item["article"], item.get("main_kw", ""), item.get("sub_kw", ""), others, categories)
+    return evaluate(item["article"], item.get("main_kw", ""), item.get("sub_kw", ""), others, categories, limits)
 
 
 def main():
@@ -269,7 +409,8 @@ def main():
     items = load_items()
     categories = site_categories()
     targets = items if args.all else [json.loads(Path(p).read_text(encoding="utf-8")) for p in args.paths]
-    results = {t["slug"]: evaluate_item(t, items, categories) for t in targets}
+    limits = published_limits()
+    results = {t["slug"]: evaluate_item(t, items, categories, limits) for t in targets}
     if args.json:
         print(json.dumps(results, ensure_ascii=False, indent=1))
     else:

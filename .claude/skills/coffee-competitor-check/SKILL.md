@@ -9,7 +9,8 @@ description: はじめてのおうちコーヒーの公開済み記事を、主�
 
 ## 対象を決める
 
-- slug の指定があればその記事。なければ `content/articles/*.json` のうち `docs/competitor/<slug>.md` がない記事、または90日以上たったもの。
+- slug の指定があればその記事。`content/articles/<slug>.json` がない（まだ公開されていない）ときは、検索もレポートもせず、その旨とキュー（`docs/auto-queue.csv`）での状態だけを伝えて止まる。
+- slug の指定がなければ `content/articles/*.json` のうち `docs/competitor/<slug>.md` がない記事、または90日以上たったもの。
 - 記事JSONの `main_kw`（主キーワード）、`article.sections` の見出し、表、`pipeline.coverage` を読む。
 
 ## 手順

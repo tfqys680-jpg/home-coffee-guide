@@ -6,7 +6,7 @@ export PYTHONDONTWRITEBYTECODE=1
 
 echo "== build is up to date =="
 python3 tools/site/build.py
-if ! git diff --quiet -- . ':(exclude)docs' || [ -n "$(git ls-files --others --exclude-standard -- column)" ]; then
+if ! git diff --quiet -- . ':(exclude)docs' || [ -n "$(git ls-files --others --exclude-standard -- column category)" ]; then
   echo "生成されたHTMLがコミット内容と一致しません。tools/site/build.py を実行してコミットしてください。"
   git status --short
   exit 1

@@ -20,6 +20,7 @@ sys.path.insert(0, str(HERE.parent))
 sys.path.insert(0, str(HERE))
 import article_quality as q  # noqa: E402
 import fixtures as fx  # noqa: E402
+import redteam  # noqa: E402
 
 CATS = ["brew", "beans", "tools", "storage", "caffeine"]
 A_KW = ("コーヒー 粉 量 目安", "コーヒー 何グラム 一杯;濃さ 調整")
@@ -64,6 +65,47 @@ class Similarity(unittest.TestCase):
         r = ev(fx.near_duplicate_of_amount(), ("コーヒー 粉 何グラム", ""), [fx.good_amount()])
         self.assertIn("似すぎている", joined(r))
         self.assertIn("H2見出しが", joined(r))
+
+
+class RedTeam(unittest.TestCase):
+    """別文脈のエージェントが作った「すり抜け」原稿が、どれも落ちること。"""
+
+    def evaluate_set(self, items):
+        out = {}
+        for it in items:
+            others = [o["article"] for o in items if o["slug"] != it["slug"]]
+            out[it["slug"]] = q.evaluate(it["article"], it.get("main_kw", ""), it.get("sub_kw", ""), others, CATS)
+        return out
+
+    def test_goods_pass_together(self):
+        res = self.evaluate_set(redteam.goods())
+        self.assertTrue(all(r["pass"] for r in res.values()), res)
+
+    def test_every_attack_is_caught(self):
+        good_slugs = {g["slug"] for g in redteam.goods()}
+        for name, make in redteam.ATTACKS.items():
+            with self.subTest(attack=name):
+                res = self.evaluate_set(redteam.goods() + make())
+                attack = {k: v for k, v in res.items() if k not in good_slugs}
+                self.assertTrue(any(not r["pass"] for r in attack.values()),
+                                f"{name} がすり抜けた: { {k: v['metrics'] for k, v in attack.items()} }")
+
+    def test_invisible_characters_are_rejected(self):
+        a = fx.good_amount()
+        a["lead"] = "\u200b".join(a["lead"])
+        self.assertIn("見えない文字", joined(ev(a)))
+
+    def test_full_width_and_extra_units_need_citations(self):
+        for s in ("お湯は９０℃にします。", "１５０ｍｌを注ぎます。", "1.5Lのケトルを使います。", "粉を1.5倍にします。"):
+            with self.subTest(sentence=s):
+                a = fx.good_amount()
+                a["lead"] += s
+                self.assertIn("出典番号のない数値", joined(ev(a)))
+
+    def test_citation_number_must_exist(self):
+        a = fx.good_amount()
+        a["lead"] += "目安があります[9]。"
+        self.assertIn("存在しない出典番号", joined(ev(a)))
 
 
 class FormatRules(unittest.TestCase):
@@ -111,6 +153,11 @@ class Cli(unittest.TestCase):
         d = self.site / "content/articles"
         for p in d.glob("*.json"):
             p.unlink()
+        # 見本原稿は短いので、文字数の下限だけテスト用に下げる
+        cfg_path = self.site / "tools/auto-publish/config.json"
+        cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+        cfg["min_body_chars"] = 1000
+        cfg_path.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
         self.write("coffee-to-water-ratio", fx.good_amount(), *A_KW)
         self.write("slow-drip-fix", fx.good_slow_drip(), *B_KW)
 

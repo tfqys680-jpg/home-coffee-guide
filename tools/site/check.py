@@ -13,6 +13,7 @@ import json
 import os
 import re
 import sys
+import unicodedata
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -27,7 +28,10 @@ def load_config():
 
 
 def text_of(fragment):
-    return re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]+>", " ", fragment))).strip()
+    """タグを除いた本文。NFKC正規化し、ゼロ幅スペースなどの書式文字を除く（禁止表現のすり抜け対策）。"""
+    t = unicodedata.normalize("NFKC", html.unescape(re.sub(r"<[^>]+>", " ", fragment)))
+    t = "".join(ch for ch in t if unicodedata.category(ch) != "Cf")
+    return re.sub(r"\s+", " ", t).strip()
 
 
 def main():
@@ -82,6 +86,8 @@ def main():
                 errors.append(f"{rel}: リンク切れ {href}")
         if rel.startswith("column/"):
             article = re.search(r"<article.*?</article>", src, re.S).group(0)
+            if any(unicodedata.category(ch) == "Cf" for ch in html.unescape(article)):
+                errors.append(f"{rel}: 見えない文字（ゼロ幅スペースなど）が含まれる")
             body = text_of(OPERATOR_NOTE.sub(" ", article)).replace("必ずしも", "")
             note = text_of(" ".join(OPERATOR_NOTE.findall(article))).replace("必ずしも", "")
             for phrase in banned:
