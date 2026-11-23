@@ -1,0 +1,184 @@
+{
+ "hand-drip-basic-steps": [
+  {
+   "title": "National Coffee Association「Pour-Over Coffee」",
+   "url": "https://www.aboutcoffee.org/brewing/pour-over-coffee/",
+   "note": "ハンドドリップの粉と湯の比率（1:13〜1:16）、湯温（93±3℃）、接触時間（2〜4分）、蒸らし（粉の2倍の湯で30〜45秒）",
+   "found_by": "manual"
+  },
+  {
+   "title": "全日本コーヒー協会「おいしいコーヒーの基本原則」",
+   "url": "https://coffee.ajca.or.jp/column/4452/",
+   "note": "挽き方別の1杯分の粉の量（極細6〜8g、細8〜10g、中細約10g、中12〜13g、粗約15g）と向く器具、湯温95℃前後、軟水",
+   "found_by": "manual"
+  },
+  {
+   "title": "National Coffee Association「Drip Coffee」",
+   "url": "https://www.aboutcoffee.org/brewing/drip-coffee/",
+   "note": "6オンスの湯に粉大さじ1〜2の目安、器具別の挽き目（フレンチプレス・水出し=粗挽き、ドリップ・ハンドドリップ=中挽き、エスプレッソ=細挽き）",
+   "found_by": "manual"
+  }
+ ],
+ "coffee-bean-storage": [
+  {
+   "title": "National Coffee Association「Storage and Shelf Life」",
+   "url": "https://www.aboutcoffee.org/beans/storage-and-shelf-life/",
+   "note": "保存期間の目安（常温の豆1〜3週間、冷蔵の豆2週間、冷凍の豆3〜4か月、常温の粉1〜2週間）、冷凍の取り出し方、不透明な密閉容器",
+   "found_by": "manual"
+  },
+  {
+   "title": "全日本コーヒー協会「焙煎・配合・粉砕」",
+   "url": "https://coffee.ajca.or.jp/column/4472/",
+   "note": "焙煎度8段階の名称と特徴、挽き方5段階の粒の目安と向く器具、挽くときのポイント（飲む直前に必要量だけ・摩擦熱を抑える・粒を均一に・微粉を減らす）、香りは焙煎直後が最も多い",
+   "found_by": "manual"
+  },
+  {
+   "title": "全日本コーヒー協会「おいしいコーヒーの基本原則」",
+   "url": "https://coffee.ajca.or.jp/column/4452/",
+   "note": "挽き方別の1杯分の粉の量（極細6〜8g、細8〜10g、中細約10g、中12〜13g、粗約15g）と向く器具、湯温95℃前後、軟水",
+   "found_by": "manual"
+  }
+ ],
+ "coffee-grind-size-guide": [
+  {
+   "title": "全日本コーヒー協会「焙煎・配合・粉砕」",
+   "url": "https://coffee.ajca.or.jp/column/4472/",
+   "note": "焙煎度8段階の名称と特徴、挽き方5段階の粒の目安と向く器具、挽くときのポイント（飲む直前に必要量だけ・摩擦熱を抑える・粒を均一に・微粉を減らす）、香りは焙煎直後が最も多い",
+   "found_by": "manual"
+  },
+  {
+   "title": "全日本コーヒー協会「おいしいコーヒーの基本原則」",
+   "url": "https://coffee.ajca.or.jp/column/4452/",
+   "note": "挽き方別の1杯分の粉の量（極細6〜8g、細8〜10g、中細約10g、中12〜13g、粗約15g）と向く器具、湯温95℃前後、軟水",
+   "found_by": "manual"
+  },
+  {
+   "title": "National Coffee Association「Drip Coffee」",
+   "url": "https://www.aboutcoffee.org/brewing/drip-coffee/",
+   "note": "6オンスの湯に粉大さじ1〜2の目安、器具別の挽き目（フレンチプレス・水出し=粗挽き、ドリップ・ハンドドリップ=中挽き、エスプレッソ=細挽き）",
+   "found_by": "manual"
+  }
+ ],
+ "coffee-roast-levels": [
+  {
+   "title": "全日本コーヒー協会「焙煎・配合・粉砕」",
+   "url": "https://coffee.ajca.or.jp/column/4472/",
+   "note": "焙煎度8段階の名称と特徴、挽き方5段階の粒の目安と向く器具、挽くときのポイント（飲む直前に必要量だけ・摩擦熱を抑える・粒を均一に・微粉を減らす）、香りは焙煎直後が最も多い",
+   "found_by": "manual"
+  },
+  {
+   "title": "National Coffee Association「Roasts」",
+   "url": "https://www.aboutcoffee.org/beans/roasts/",
+   "note": "浅煎り・中煎り・深煎りの色・表面の油・味、浅煎りのカフェインはわずかに多く深煎りの味の強さはカフェイン量と関係しない",
+   "found_by": "manual"
+  }
+ ],
+ "cold-brew-coffee-at-home": [
+  {
+   "title": "National Coffee Association「Cold Brew Coffee」",
+   "url": "https://www.aboutcoffee.org/brewing/cold-brew-coffee/",
+   "note": "水出しの比率（1:4〜1:5）、浸漬約12時間、粗挽き、常温以下の水で作り抽出後は冷蔵",
+   "found_by": "manual"
+  },
+  {
+   "title": "全日本コーヒー協会「焙煎・配合・粉砕」",
+   "url": "https://coffee.ajca.or.jp/column/4472/",
+   "note": "焙煎度8段階の名称と特徴、挽き方5段階の粒の目安と向く器具、挽くときのポイント（飲む直前に必要量だけ・摩擦熱を抑える・粒を均一に・微粉を減らす）、香りは焙煎直後が最も多い",
+   "found_by": "manual"
+  }
+ ],
+ "coffee-to-water-ratio": [
+  {
+   "title": "National Coffee Association「Pour-Over Coffee」",
+   "url": "https://www.aboutcoffee.org/brewing/pour-over-coffee/",
+   "note": "ハンドドリップの粉と湯の比率（1:13〜1:16）、湯温（93±3℃）、接触時間（2〜4分）、蒸らし（粉の2倍の湯で30〜45秒）",
+   "found_by": "manual"
+  },
+  {
+   "title": "National Coffee Association「Drip Coffee」",
+   "url": "https://www.aboutcoffee.org/brewing/drip-coffee/",
+   "note": "6オンスの湯に粉大さじ1〜2の目安、器具別の挽き目（フレンチプレス・水出し=粗挽き、ドリップ・ハンドドリップ=中挽き、エスプレッソ=細挽き）",
+   "found_by": "manual"
+  },
+  {
+   "title": "全日本コーヒー協会「おいしいコーヒーの基本原則」",
+   "url": "https://coffee.ajca.or.jp/column/4452/",
+   "note": "挽き方別の1杯分の粉の量（極細6〜8g、細8〜10g、中細約10g、中12〜13g、粗約15g）と向く器具、湯温95℃前後、軟水",
+   "found_by": "manual"
+  },
+  {
+   "title": "National Coffee Association「French Press Coffee」",
+   "url": "https://www.aboutcoffee.org/brewing/french-press-coffee/",
+   "note": "フレンチプレスの比率（1:10〜1:16）、湯温（93±3℃）、浸漬約4分、粗挽き、使うたびに分解して洗う",
+   "found_by": "manual"
+  }
+ ],
+ "french-press-how-to": [
+  {
+   "title": "National Coffee Association「French Press Coffee」",
+   "url": "https://www.aboutcoffee.org/brewing/french-press-coffee/",
+   "note": "フレンチプレスの比率（1:10〜1:16）、湯温（93±3℃）、浸漬約4分、粗挽き、使うたびに分解して洗う",
+   "found_by": "manual"
+  },
+  {
+   "title": "全日本コーヒー協会「おいしいコーヒーの基本原則」",
+   "url": "https://coffee.ajca.or.jp/column/4452/",
+   "note": "挽き方別の1杯分の粉の量（極細6〜8g、細8〜10g、中細約10g、中12〜13g、粗約15g）と向く器具、湯温95℃前後、軟水",
+   "found_by": "manual"
+  }
+ ],
+ "coffee-grinder-types": [
+  {
+   "title": "全日本コーヒー協会「焙煎・配合・粉砕」",
+   "url": "https://coffee.ajca.or.jp/column/4472/",
+   "note": "焙煎度8段階の名称と特徴、挽き方5段階の粒の目安と向く器具、挽くときのポイント（飲む直前に必要量だけ・摩擦熱を抑える・粒を均一に・微粉を減らす）、香りは焙煎直後が最も多い",
+   "found_by": "manual"
+  },
+  {
+   "title": "National Coffee Association「Drip Coffee」",
+   "url": "https://www.aboutcoffee.org/brewing/drip-coffee/",
+   "note": "6オンスの湯に粉大さじ1〜2の目安、器具別の挽き目（フレンチプレス・水出し=粗挽き、ドリップ・ハンドドリップ=中挽き、エスプレッソ=細挽き）",
+   "found_by": "manual"
+  }
+ ],
+ "coffee-caffeine-amount": [
+  {
+   "title": "厚生労働省「食品に含まれるカフェインの過剰摂取についてQ&A」",
+   "url": "https://www.mhlw.go.jp/stf/seisakunitsuite/bunya/0000170477.html",
+   "note": "各国機関の摂取量の目安（健康な成人400mg/日、妊婦など）、コーヒー浸出液60mg/100mL、インスタント1杯80mg",
+   "found_by": "manual"
+  },
+  {
+   "title": "農林水産省「カフェインの過剰摂取について」",
+   "url": "https://www.maff.go.jp/j/syouan/seisaku/risk_analysis/priority/hazard_chem/caffeine.html",
+   "note": "WHO・FDA・EFSA・カナダ保健省などの摂取量の目安（成人・妊婦・子ども）、食品ごとのカフェイン量",
+   "found_by": "manual"
+  },
+  {
+   "title": "U.S. Food and Drug Administration「Spilling the Beans: How Much Caffeine is Too Much?」",
+   "url": "https://www.fda.gov/consumers/consumer-updates/spilling-beans-how-much-caffeine-too-much",
+   "note": "健康な成人400mg/日、12オンスの抽出コーヒー113〜247mg、デカフェ8オンス2〜15mg、妊娠中は医療者に相談",
+   "found_by": "manual"
+  }
+ ],
+ "decaf-coffee-basics": [
+  {
+   "title": "National Coffee Association「Decaf Coffee」",
+   "url": "https://www.aboutcoffee.org/beans/decaf-coffee/",
+   "note": "カフェインの約97%を除去、デカフェ8オンスあたり2〜15mg（通常は95mg）、除去工程の例",
+   "found_by": "manual"
+  },
+  {
+   "title": "サントリー お客様センター「コーヒーの表示の違い」",
+   "url": "https://www.suntory.co.jp/customer/faq/001856.html",
+   "note": "「カフェインレスコーヒー」はカフェインを90%以上除去したもの（公正競争規約に基づく表示）",
+   "found_by": "manual"
+  },
+  {
+   "title": "U.S. Food and Drug Administration「Spilling the Beans: How Much Caffeine is Too Much?」",
+   "url": "https://www.fda.gov/consumers/consumer-updates/spilling-beans-how-much-caffeine-too-much",
+   "note": "健康な成人400mg/日、12オンスの抽出コーヒー113〜247mg、デカフェ8オンス2〜15mg、妊娠中は医療者に相談",
+   "found_by": "manual"
+  }
+ ]
+}

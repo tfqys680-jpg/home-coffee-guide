@@ -15,7 +15,6 @@
 import argparse
 import csv
 import datetime as dt
-import html
 import io
 import json
 import os
@@ -31,6 +30,8 @@ sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent / "site"))
 sys.path.insert(0, str(HERE.parent / "quality"))
 import prompts  # noqa: E402
+import sources  # noqa: E402
+from sources import fetch_source  # noqa: E402
 
 ROOT = Path(os.environ.get("SITE_ROOT", HERE.parents[1]))
 os.environ.setdefault("SITE_ROOT", str(ROOT))
@@ -39,7 +40,7 @@ import article_quality  # noqa: E402
 
 JST = dt.timezone(dt.timedelta(hours=9))
 MOCK = os.environ.get("AUTO_PUBLISH_MOCK")
-_mock_calls = {"openai": 0, "claude": 0}
+_mock_calls = {"openai": 0, "claude": 0, "research": 0}
 YMYL_ORDER = {"低": 0, "中": 1, "高": 2}
 
 
@@ -105,6 +106,8 @@ def mock_response(kind):
 
 def ask_openai(system, user):
     if MOCK:
+        with open(Path(MOCK) / "requests.log", "a", encoding="utf-8") as f:  # テストで依頼文を確かめるため
+            f.write(user + "\n----\n")
         return mock_response("openai")
     data = http_post(
         "https://api.openai.com/v1/chat/completions",
@@ -128,33 +131,46 @@ def ask_claude(system, user):
     return parse_json(text)
 
 
-def html_to_text(raw):
-    raw = re.sub(r"(?is)<(script|style|noscript)[^>]*>.*?</\1>", " ", raw)
-    raw = re.sub(r"(?s)<[^>]+>", " ", raw)
-    return re.sub(r"\s+", " ", html.unescape(raw)).strip()
-
-
-def fetch_source(url):
-    """出典URLを取得し (ok, 本文抜粋) を返す。"""
+def ask_claude_search(user, cfg):
+    """Claude の Web検索（検索先は config の source_domains に限定）で出典の候補を探す。{"sources": [...]} を返す。"""
     if MOCK:
-        table = json.loads((Path(MOCK) / "sources.json").read_text(encoding="utf-8"))
-        return (url in table, table.get(url, "取得失敗（mock）"))
-    if not str(url).startswith("https://"):
-        return False, "https以外のURL"
-    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (home-coffee-guide source check)"})
+        return mock_response("research")
+    tool = {"type": "web_search_20250305", "name": "web_search", "max_uses": cfg.get("research_max_uses", 5)}
+    if cfg.get("source_domains"):
+        tool["allowed_domains"] = cfg["source_domains"]
+    messages, content = [{"role": "user", "content": user}], []
+    for _ in range(3):  # 検索が長引くと pause_turn で一度返るので、続きを求める
+        data = http_post(
+            "https://api.anthropic.com/v1/messages",
+            {"x-api-key": require_env("ANTHROPIC_API_KEY"), "anthropic-version": "2023-06-01", "content-type": "application/json"},
+            {"model": require_env("ANTHROPIC_MODEL"), "max_tokens": 8000, "system": prompts.RESEARCH_SYSTEM,
+             "tools": [tool], "messages": messages},
+        )
+        content += data.get("content", [])
+        if data.get("stop_reason") != "pause_turn":
+            break
+        messages = [messages[0], {"role": "assistant", "content": content}]
+    text = "".join(b.get("text", "") for b in content if b.get("type") == "text")
     try:
-        with urllib.request.urlopen(req, timeout=30) as r:
-            if r.status != 200:
-                return False, f"HTTP {r.status}"
-            if "pdf" in r.headers.get("Content-Type", "").lower():
-                return False, "PDFは自動照合できないため除外"
-            body = r.read(1_500_000)
-            text = html_to_text(body.decode(r.headers.get_content_charset() or "utf-8", errors="replace"))
-            if len(text) < 200:
-                return False, "本文が取得できない"
-            return True, text[:12000]
-    except Exception as ex:  # noqa: BLE001
-        return False, f"取得失敗: {ex}"[:200]
+        found = parse_json(text)
+        if isinstance(found.get("sources"), list):
+            return found
+    except (PipelineError, ValueError):
+        pass
+    # 最後の答えにJSONがないときは、検索結果に出たURLを候補にする（取得確認はパイプライン側で行う）
+    results = [r for b in content if b.get("type") == "web_search_tool_result" and isinstance(b.get("content"), list)
+               for r in b["content"]]
+    return {"sources": [{"title": r.get("title", ""), "url": r.get("url", ""), "note": "検索結果"} for r in results]}
+
+
+def research_prompt(task):
+    return prompts.RESEARCH_USER.format(theme=task["テーマ"], main_kw=task["主キーワード"], sub_kw=task["補助キーワード"],
+                                        reader=task["想定読者"], notes=task["備考"])
+
+
+def sources_text(verified, excerpt_chars=6000):
+    return "\n\n".join(f"### {s['title']}\nURL: {s['url']}\nメモ: {s['note']}\n本文抜粋: {s['excerpt'][:excerpt_chars]}"
+                       for s in verified)
 
 
 # ---------------------------------------------------------------- queue & existing
@@ -313,24 +329,45 @@ def append_run_log(date, lines):
 def run():
     cfg = json.loads((HERE / "config.json").read_text(encoding="utf-8"))
     date = today()
-    task = pick_task(cfg)
-    if not task:
-        return {"status": "skipped", "reason": "キューが空で、新しいテーマも採用されませんでした"}
-    slug = task["slug"]
     existing = existing_articles()
     existing_slugs = {a["slug"] for a in existing}
-    if slug in existing_slugs or any(a.get("main_kw") == task["主キーワード"] for a in existing):
-        set_queue_status(cfg, slug, "重複のため除外")
-        return {"status": "blocked", "slug": slug, "reason": "既存記事とslugまたは主キーワードが重複", "auto_merge": True}
+    # 書く前に出典をそろえる。そろわないテーマは「出典不足」にして次のテーマへ（1回の実行で max_topics_per_run 件まで）
+    task, verified, short, source_notes = None, [], [], []
+    for _ in range(cfg.get("max_topics_per_run", 3)):
+        task = pick_task(cfg, refill=not short)
+        if not task:
+            break
+        slug = task["slug"]
+        if slug in existing_slugs or any(a.get("main_kw") == task["主キーワード"] for a in existing):
+            set_queue_status(cfg, slug, "重複のため除外")
+            return {"status": "blocked", "slug": slug, "reason": "既存記事とslugまたは主キーワードが重複", "auto_merge": True}
+        verified, source_notes = sources.gather_sources(task, cfg, lambda u: ask_claude_search(u, cfg), research_prompt)
+        if len(verified) >= cfg["min_verified_sources"]:
+            break
+        set_queue_status(cfg, slug, f"出典不足({date.isoformat()})")
+        short.append((task, source_notes))
+        task = None
+    if short:
+        append_run_log(date, [line for t, notes in short
+                              for line in [f"テーマ: {t['テーマ']}（{t['slug']}）", *notes, "結果: 出典がそろわないため書かずに次のテーマへ"]])
+    if not task:
+        if short:
+            return {"status": "blocked", "slug": short[-1][0]["slug"], "auto_merge": True,
+                    "reason": "出典がそろわないため記事を書かなかった: " + "、".join(t["slug"] for t, _ in short)}
+        return {"status": "skipped", "reason": "キューが空で、新しいテーマも採用されませんでした"}
+    slug = task["slug"]
+    verified_keys = {sources._key(s["url"]) for s in verified}
 
     related_list = "\n".join(f"- {a['slug']}: {a['article']['title']}" for a in existing) or "（まだありません）"
     existing_desc = existing_text()
     writer_system = prompts.WRITER_SYSTEM.replace("__RELATED__", related_list).replace("__CATEGORIES__", categories_text())
     article = ask_openai(writer_system, prompts.WRITER_USER.format(
         theme=task["テーマ"], main_kw=task["主キーワード"], sub_kw=task["補助キーワード"],
-        reader=task["想定読者"], notes=task["備考"], existing=existing_desc, existing_headings=existing_headings(existing)))
+        reader=task["想定読者"], notes=task["備考"], existing=existing_desc, existing_headings=existing_headings(existing),
+        sources=sources_text(verified)))
 
-    fetched, issues, verdict, ymyl, review = {}, [], "BLOCK", task["YMYL区分"], {}
+    fetched = {s["url"]: (True, s["excerpt"]) for s in verified}
+    issues, verdict, ymyl, review = [], "BLOCK", task["YMYL区分"], {}
 
     def source_report():
         for s in article.get("sources", []):
@@ -371,13 +408,16 @@ def run():
     errs = validate(article, cfg, existing_slugs)
     errs += [f"品質ゲート: {x}" for x in quality["errors"]]
     errs += [f"競合との比較: {x}" for x in coverage_errors(review)]
+    unlisted = [s.get("url") for s in article.get("sources", []) if sources._key(s.get("url", "")) not in verified_keys]
+    if unlisted:
+        errs.append(f"確認済み一覧にない出典: {unlisted}")
     unverified = [s.get("url") for s in article.get("sources", []) if not fetched.get(s.get("url"), (False,))[0]]
     if unverified:
         errs.append(f"取得確認できない出典が残っている: {unverified}")
     if verdict != "PASS":
         errs.append(f"Claudeの審査結果が {verdict}")
 
-    log = [f"テーマ: {task['テーマ']}（column/{slug}/）", f"Claude審査: {verdict}／YMYL: {ymyl}",
+    log = [f"テーマ: {task['テーマ']}（column/{slug}/）", *source_notes, f"Claude審査: {verdict}／YMYL: {ymyl}",
            f"出典の取得確認: {sum(1 for v in fetched.values() if v[0])}/{len(fetched)}件"]
     log += [f"審査指摘: {x}" for x in issues[:20]]
     log.append("品質ゲート: " + ("合格" if quality["pass"] else "不合格") + f"（{json.dumps(quality['metrics'], ensure_ascii=False)}）")
