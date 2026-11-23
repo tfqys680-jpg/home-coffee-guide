@@ -32,6 +32,8 @@ class BuildTest(unittest.TestCase):
         self.site = self.tmp / "site"
         shutil.copytree(REPO, self.site, ignore=shutil.ignore_patterns(".git", "__pycache__"))
         self.env = dict(os.environ, SITE_ROOT=str(self.site), PYTHONDONTWRITEBYTECODE="1")
+        # 本番の site.json に値が入っていても、既定の挙動を試せるよう空に戻す
+        self.set_site(gsc_verification="", operator_profile=[])
 
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
