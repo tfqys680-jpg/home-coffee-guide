@@ -10,7 +10,22 @@
   "max_sources_per_article": 5,
   "max_topics_per_run": 3,
   "research_max_uses": 5,
-  "source_domains": [],
+  "source_domains": [
+    "aboutcoffee.org",
+    "ncausa.org",
+    "coffee.ajca.or.jp",
+    "sca.coffee",
+    "ico.org",
+    "mhlw.go.jp",
+    "maff.go.jp",
+    "fsc.go.jp",
+    "caa.go.jp",
+    "nihs.go.jp",
+    "fda.gov",
+    "canada.ca",
+    "efsa.europa.eu",
+    "food.gov.uk"
+  ],
   "min_body_chars": 2500,
   "queue_file": "docs/auto-queue.csv",
   "banned_phrases": [

@@ -19,6 +19,7 @@
 | `images/ogp.png` `images/logo.png` | SNS共有用の画像とロゴ（`python3 tools/site/make_images.py` で作り直せる） |
 | `images/articles/<slug>/` | 運営者の確認メモに載せる写真（運営者が撮ったもの） |
 | `docs/auto-queue.csv` | 記事テーマのキュー（状態「待機」が対象） |
+| `docs/sources.json` | テーマ（slug）ごとの出典リスト。記事を書く前にここのURLを取得して中身を確かめる（`found_by`: manual＝人が登録、auto＝自動調査で見つけたもの） |
 | `docs/run-log.md` | 自動実行のログ |
 | `.github/workflows/` | CI、Pages への公開、自動記事（火・金 06:17 JST） |
 | `tools/site/collect_public.sh` `check_public.py` | 公開するファイルを集める（deploy.yml が使う）／集めたものだけでリンク切れがないかの確認 |
@@ -26,10 +27,10 @@
 ## 自動記事の流れ
 
 1. `docs/auto-queue.csv` から「待機」のテーマを1件選ぶ。空なら ChatGPT が提案し、Claude が選別して補充する。
-2. ChatGPT が記事原稿（JSON）を作る。
-3. 原稿の出典URLを実際に取得し、本文を Claude に渡して照合・推敲する（最大2回）。あわせて Claude が、検索上位の記事が扱う論点を5〜8個挙げて記事が扱っているかを点検し、上位にない独自の要素を確かめる。
+2. 書く前に出典をそろえる。`docs/sources.json` のURLを実際に取得して中身を確かめ、2件に足りなければ Claude が Web検索（`config.json` の `source_domains` の公的機関・業界団体に限定）で候補を探し、取得確認できたものだけを使う。それでも2件そろわないテーマは「出典不足」にして次の「待機」テーマへ（1回の実行で最大3テーマ）。別のページへ転送されたURL・PDF・本文が取れないページは使わない。
+3. ChatGPT に確認済み出典の本文抜粋を渡して記事原稿（JSON）を作らせる（出典は一覧のURLだけ。抜粋にない数値は書かない）。原稿と出典本文を Claude に渡して照合・推敲する（最大2回）。あわせて Claude が、検索上位の記事が扱う論点を5〜8個挙げて記事が扱っているかを点検し、上位にない独自の要素を確かめる。
 4. 品質ゲート（`tools/quality/article_quality.py`）で判定する。不合格なら指摘を Claude に渡して1回だけ推敲し直し、もう一度判定する。
-5. 機械検証（禁止表現、出典2件以上、構成、文字数、関連記事・本文リンクの実在）。
+5. 機械検証（禁止表現、出典2件以上、確認済み一覧にない出典がないこと、構成、文字数、関連記事・本文リンクの実在）。
 6. 記事JSONを保存してサイトを再生成し、PRを作成。`tools/verify.sh` が通り、YMYL区分が「低」「中」なら自動マージして Pages に公開する。
 
 自動公開しないもの:
@@ -75,7 +76,9 @@ Settings → Actions → General → Workflow permissions で「Read and write p
 
 - 手動で1本作る: Actions → auto-publish → Run workflow
 - 停止: Variable `AUTO_PUBLISH_ENABLED` を `false`
-- テーマの追加・並べ替え・除外: `docs/auto-queue.csv` を編集
+- テーマの追加・並べ替え・除外: `docs/auto-queue.csv` を編集。新しいテーマには `docs/sources.json` に同じ slug で出典（数値や定義が本文に載っているページ）を2件以上入れておくと確実（なければ自動調査に回る）
+- 「出典不足」のテーマ: `docs/sources.json` に出典を足し、キューの状態を「待機」に戻すと次の実行で再挑戦する
+- 自動調査の検索先: `tools/auto-publish/config.json` の `source_domains` を編集
 - 記事の修正: `content/articles/<slug>.json` を直して `python3 tools/site/build.py` を実行し、PRで反映
 - Search Console: プロパティは「URLプレフィックス」で `https://tfqys680-jpg.github.io/home-coffee-guide/` を登録し、確認方法「HTMLタグ」の `content="..."` の値を `site.json` の `gsc_verification` に入れて build → PR。所有権の確認後に `sitemap.xml` を送信する
 - 運営者の紹介: `site.json` の `operator_profile` に段落を配列で入れると、運営者情報ページに「運営者について」が出る（空なら出ない）
