@@ -13,6 +13,7 @@
 | `tools/site/build.py` | 記事JSONからトップ・記事・sitemap などを生成 |
 | `tools/site/check.py` | 生成後のサイトの検証（リンク切れ・重複タイトル・構造化データ・禁止表現） |
 | `tools/auto-publish/` | 自動記事パイプライン（プロンプト・設定・テスト） |
+| `images/articles/<slug>/` | 運営者の確認メモに載せる写真（運営者が撮ったもの） |
 | `docs/auto-queue.csv` | 記事テーマのキュー（状態「待機」が対象） |
 | `docs/run-log.md` | 自動実行のログ |
 | `.github/workflows/` | CI、Pages への公開、自動記事（火・金 06:17 JST） |
@@ -53,6 +54,25 @@ Settings → Actions → General → Workflow permissions で「Read and write p
 - 停止: Variable `AUTO_PUBLISH_ENABLED` を `false`
 - テーマの追加・並べ替え・除外: `docs/auto-queue.csv` を編集
 - 記事の修正: `content/articles/<slug>.json` を直して `python3 tools/site/build.py` を実行し、PRで反映
+- Search Console: プロパティは「URLプレフィックス」で `https://tfqys680-jpg.github.io/home-coffee-guide/` を登録し、確認方法「HTMLタグ」の `content="..."` の値を `site.json` の `gsc_verification` に入れて build → PR。所有権の確認後に `sitemap.xml` を送信する
+- 運営者の紹介: `site.json` の `operator_profile` に段落を配列で入れると、運営者情報ページに「運営者について」が出る（空なら出ない）
+
+### 運営者の確認メモ・写真
+
+運営者本人が実際に淹れて確かめたことは、記事JSONの `operator` にだけ書く。生成AIの本文には体験の表現を入れない方針は変わらない。AIが代わりに書いたり、運営者が試していない内容を書いたりしない。
+
+```json
+"operator": {
+  "checked": "2026-12-01",
+  "notes": ["粉12g・湯180mlで淹れ、2投目を細く注ぐと落ちる速さが安定した。"],
+  "photos": [{"src": "images/articles/<slug>/drip.jpg", "alt": "ドリッパーに湯を注いでいるところ", "width": 1200, "height": 800, "caption": "自宅で淹れたときの様子"}]
+}
+```
+
+- 記事に「運営者の確認メモ」の枠が出て、AIの注記は「確認メモ以外の本文は人が試していない」に変わる
+- `checked` が最終更新日・構造化データ・sitemap の更新日に反映され、写真は構造化データの `image` に入る
+- `tools/site/check.py` は写真ファイルの有無と alt を確認する。メモの中では体験の表現（「私が」「実際に飲んで」など）を許すが、健康効果の断定などは本文と同じく禁止
+- 写真は横1200px程度のJPEGに縮めてから置く（`width`/`height` は実際の大きさ）
 - 記事の取り下げ: 該当の記事JSONを削除して build を実行（ページも消える）
 - 保留になった原稿: `docs/last-rejected.json`
 

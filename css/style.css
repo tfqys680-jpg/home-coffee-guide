@@ -69,6 +69,12 @@ main h3 { font-size: 19px; margin: 30px 0 10px; color: var(--roast); }
 .article h1 { font-size: 28px; line-height: 1.5; margin: 6px 0 18px; color: var(--bean); }
 .meta, .small { font-size: 14px; color: var(--muted); }
 .ai-note { background: #f1ece5; border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; font-size: 14px; color: var(--muted); line-height: 1.8; }
+.operator-note { background: var(--paper); border: 1px solid var(--crema); border-radius: 10px; padding: 12px 16px; margin: 16px 0; }
+.operator-label { font-weight: 700; margin: 0 0 6px; color: var(--roast); }
+.operator-note p { margin: 6px 0; }
+.operator-note figure { margin: 12px 0 4px; }
+.operator-note img { display: block; border-radius: 8px; }
+.operator-note figcaption { font-size: 14px; color: var(--muted); margin-top: 4px; }
 .summary { background: var(--paper); border-left: 5px solid var(--crema); border-radius: 8px; padding: 14px 18px; margin: 20px 0; }
 .summary-label, .toc-label, .example-label { font-weight: 700; margin: 0 0 4px; color: var(--roast); }
 .summary p:last-child { margin-bottom: 0; }

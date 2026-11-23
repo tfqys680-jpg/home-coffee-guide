@@ -5,6 +5,8 @@
 - 内部リンク切れなし、JSON-LDが読める、パンくずの表示とJSON-LDが一致
 - 記事ページがトップとsitemapから辿れる
 - 記事本文に禁止表現（健康効果の断定など）がない
+- 画像ファイルが存在し、alt が空でない
+- 運営者の確認メモ（運営者本人が書く欄）は体験の表現だけを許し、健康効果の断定などは本文と同じく禁止
 """
 import html
 import json
@@ -17,9 +19,11 @@ from urllib.parse import urlparse
 ROOT = Path(os.environ.get("SITE_ROOT", Path(__file__).resolve().parents[2]))
 
 
-def banned_phrases():
-    cfg = json.loads((ROOT / "tools/auto-publish/config.json").read_text(encoding="utf-8"))
-    return cfg["banned_phrases"]
+OPERATOR_NOTE = re.compile(r'<aside class="operator-note".*?</aside>', re.S)
+
+
+def load_config():
+    return json.loads((ROOT / "tools/auto-publish/config.json").read_text(encoding="utf-8"))
 
 
 def text_of(fragment):
@@ -31,7 +35,9 @@ def main():
     pages = sorted(p for p in ROOT.rglob("*.html") if ".git" not in p.parts and "node_modules" not in p.parts
                    and not str(p.relative_to(ROOT)).startswith(("tools/", "content/", "docs/")))
     titles = {}
-    banned = banned_phrases()
+    cfg = load_config()
+    banned = cfg["banned_phrases"]
+    note_allowed = set(cfg.get("operator_note_allowed_phrases", []))
     for page in pages:
         rel = page.relative_to(ROOT).as_posix()
         src = page.read_text(encoding="utf-8")
@@ -59,6 +65,13 @@ def main():
                     errors.append(f"{rel}: パンくずの表示とJSON-LDが不一致 {dom_names} != {ld_names}")
         if rel == "404.html":
             continue
+        for tag in re.findall(r"<img\b[^>]*>", src):
+            m_src, m_alt = re.search(r'\bsrc="([^"]*)"', tag), re.search(r'\balt="([^"]*)"', tag)
+            img = m_src.group(1) if m_src else ""
+            if not (m_alt and m_alt.group(1).strip()):
+                errors.append(f"{rel}: 画像の alt がない {img}")
+            if img and not img.startswith(("http://", "https://")) and not (page.parent / urlparse(img).path).resolve().exists():
+                errors.append(f"{rel}: 画像がない {img}")
         for href in re.findall(r'href="([^"]+)"', src):
             if href.startswith(("http://", "https://", "#", "mailto:")):
                 continue
@@ -68,9 +81,11 @@ def main():
             if not target.exists():
                 errors.append(f"{rel}: リンク切れ {href}")
         if rel.startswith("column/"):
-            body = text_of(re.search(r"<article.*?</article>", src, re.S).group(0)).replace("必ずしも", "")
+            article = re.search(r"<article.*?</article>", src, re.S).group(0)
+            body = text_of(OPERATOR_NOTE.sub(" ", article)).replace("必ずしも", "")
+            note = text_of(" ".join(OPERATOR_NOTE.findall(article))).replace("必ずしも", "")
             for phrase in banned:
-                if phrase in body:
+                if phrase in body or (phrase not in note_allowed and phrase in note):
                     errors.append(f"{rel}: 禁止表現「{phrase}」")
     for title, where in titles.items():
         if len(where) > 1:
