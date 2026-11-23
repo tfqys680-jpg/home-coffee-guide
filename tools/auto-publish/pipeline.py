@@ -15,7 +15,6 @@
 import argparse
 import csv
 import datetime as dt
-import html
 import io
 import json
 import os
@@ -31,6 +30,8 @@ sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent / "site"))
 sys.path.insert(0, str(HERE.parent / "quality"))
 import prompts  # noqa: E402
+import sources  # noqa: E402
+from sources import fetch_source  # noqa: E402
 
 ROOT = Path(os.environ.get("SITE_ROOT", HERE.parents[1]))
 os.environ.setdefault("SITE_ROOT", str(ROOT))
@@ -126,35 +127,6 @@ def ask_claude(system, user):
     )
     text = "".join(b.get("text", "") for b in data.get("content", []) if b.get("type") == "text")
     return parse_json(text)
-
-
-def html_to_text(raw):
-    raw = re.sub(r"(?is)<(script|style|noscript)[^>]*>.*?</\1>", " ", raw)
-    raw = re.sub(r"(?s)<[^>]+>", " ", raw)
-    return re.sub(r"\s+", " ", html.unescape(raw)).strip()
-
-
-def fetch_source(url):
-    """出典URLを取得し (ok, 本文抜粋) を返す。"""
-    if MOCK:
-        table = json.loads((Path(MOCK) / "sources.json").read_text(encoding="utf-8"))
-        return (url in table, table.get(url, "取得失敗（mock）"))
-    if not str(url).startswith("https://"):
-        return False, "https以外のURL"
-    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (home-coffee-guide source check)"})
-    try:
-        with urllib.request.urlopen(req, timeout=30) as r:
-            if r.status != 200:
-                return False, f"HTTP {r.status}"
-            if "pdf" in r.headers.get("Content-Type", "").lower():
-                return False, "PDFは自動照合できないため除外"
-            body = r.read(1_500_000)
-            text = html_to_text(body.decode(r.headers.get_content_charset() or "utf-8", errors="replace"))
-            if len(text) < 200:
-                return False, "本文が取得できない"
-            return True, text[:12000]
-    except Exception as ex:  # noqa: BLE001
-        return False, f"取得失敗: {ex}"[:200]
 
 
 # ---------------------------------------------------------------- queue & existing

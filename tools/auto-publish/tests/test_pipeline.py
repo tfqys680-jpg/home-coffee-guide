@@ -219,6 +219,38 @@ class PipelineTest(unittest.TestCase):
         self.assertIn("似すぎている", r["reason"])
 
 
+class SourceFetchTest(unittest.TestCase):
+    """出典の取得確認（転送先が別ページか、本文の抜き出し）。"""
+
+    @classmethod
+    def setUpClass(cls):
+        sys.path.insert(0, str(REPO / "tools/auto-publish"))
+        import sources
+        cls.sources = sources
+
+    def test_redirect_to_other_page_is_not_same_page(self):
+        # 2026-11-23 の実例: NCA の旧URLは数値のない一覧ページへ転送されていた
+        self.assertFalse(self.sources.same_page("https://www.ncausa.org/About-Coffee/How-to-Brew-Coffee",
+                                                "https://www.aboutcoffee.org/brewing/"))
+        self.assertFalse(self.sources.same_page("https://example.org/a", "https://example.org/b"))
+
+    def test_scheme_www_and_trailing_slash_are_same_page(self):
+        self.assertTrue(self.sources.same_page("http://example.org/a", "https://www.example.org/a/"))
+        self.assertTrue(self.sources.same_page("https://www.example.org/a/", "https://example.org/a"))
+
+    def test_extract_prefers_main_over_navigation(self):
+        raw = ("<html><body><nav>" + "メニュー項目 " * 50 + "</nav><main><h1>淹れ方</h1><p>湯温は93℃</p></main>"
+               "<footer>フッター</footer></body></html>")
+        text = self.sources.extract_text(raw)
+        self.assertIn("湯温は93℃", text)
+        self.assertNotIn("メニュー項目", text)
+        self.assertNotIn("フッター", text)
+
+    def test_extract_falls_back_to_whole_page(self):
+        text = self.sources.extract_text("<html><body><div>本文 15g</div><script>x=1</script></body></html>")
+        self.assertEqual(text, "本文 15g")
+
+
 class ShipNotificationTest(unittest.TestCase):
     """ship.sh が止まるときに Issue で知らせること（gh は記録するだけの偽物に差し替える）。"""
 
