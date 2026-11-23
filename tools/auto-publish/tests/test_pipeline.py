@@ -151,6 +151,38 @@ class PipelineTest(unittest.TestCase):
         self.assertEqual(r["status"], "blocked")
         self.assertIn("本文のリンク先の記事がない", r["reason"])
 
+    # ---- キューの自動補充（D3）と本番の文字数（E6）
+    def test_empty_queue_is_refilled_and_published_at_production_length(self):
+        cfg_path = self.site / "tools/auto-publish/config.json"
+        cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+        cfg["min_body_chars"] = json.loads((REPO / "tools/auto-publish/config.json").read_text(encoding="utf-8"))["min_body_chars"]
+        cfg_path.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
+        (self.site / "docs/auto-queue.csv").write_text(
+            "slug,テーマ,主キーワード,補助キーワード,想定読者,YMYL区分,状態,備考\n"
+            "old-topic,公開済みのテーマ,古い キーワード,古い,読者,低,公開(2026-11-01),\n", encoding="utf-8")
+        topic = {"slug": "coffee-mill-types", "テーマ": "コーヒーミルの種類と選び方", "主キーワード": "コーヒーミル 種類 違い",
+                 "補助キーワード": "手挽き 電動 比較;臼式 プロペラ式", "想定読者": "ミルを買う人", "YMYL区分": "低", "備考": "方式の違い"}
+        art = fx.good_long_mill()
+        d = self.tmp / "fx-refill"
+        d.mkdir()
+        files = {"openai_1.json": {"topics": [topic]}, "claude_1.json": {"topics": [topic], "rejected": []},
+                 "openai_2.json": art, "claude_2.json": review(art)}
+        for name, body in files.items():
+            (d / name).write_text(json.dumps(body, ensure_ascii=False), encoding="utf-8")
+        (d / "sources.json").write_text(json.dumps({u: "出典本文" * 100 for u in SRC_URLS}, ensure_ascii=False), encoding="utf-8")
+        env = dict(os.environ, SITE_ROOT=str(self.site), AUTO_PUBLISH_MOCK=str(d), AUTO_PUBLISH_DATE="2026-11-24",
+                   PYTHONDONTWRITEBYTECODE="1")
+        res = self.tmp / "result-refill.json"
+        subprocess.run([sys.executable, str(self.site / "tools/auto-publish/pipeline.py"), "--result", str(res)],
+                       env=env, check=True, capture_output=True)
+        r = json.loads(res.read_text(encoding="utf-8"))
+        self.assertEqual(r["status"], "created", r)
+        self.assertEqual(r["slug"], "coffee-mill-types")
+        self.assertIn("coffee-mill-types,コーヒーミルの種類と選び方", self.queue())
+        self.assertIn("公開(2026-11-24)", self.queue())
+        self.assertTrue((self.site / "category/tools/index.html").exists())
+        self.check_site()
+
     # ---- 品質ゲート（D2: 落ちたら指摘を渡して1回推敲し直す）
     def test_quality_failure_is_fixed_in_one_more_round(self):
         good = sample_article(1)
@@ -185,6 +217,42 @@ class PipelineTest(unittest.TestCase):
         r = self.run_pipeline(2, dup, [review(dup), review(dup)])
         self.assertEqual(r["status"], "blocked")
         self.assertIn("似すぎている", r["reason"])
+
+
+class ShipNotificationTest(unittest.TestCase):
+    """ship.sh が止まるときに Issue で知らせること（gh は記録するだけの偽物に差し替える）。"""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="coffee-ship-test-"))
+        self.bin = self.tmp / "bin"
+        self.bin.mkdir()
+        self.log = self.tmp / "gh.log"
+        (self.bin / "gh").write_text(f'#!/usr/bin/env bash\necho "$*" >> "{self.log}"\n', encoding="utf-8")
+        (self.bin / "gh").chmod(0o755)
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def ship(self, result_path):
+        env = dict(os.environ, PATH=f"{self.bin}:{os.environ['PATH']}", GITHUB_OUTPUT=str(self.tmp / "out"))
+        return subprocess.run(["bash", str(REPO / "tools/auto-publish/ship.sh"), str(result_path)], cwd=self.tmp,
+                              env=env, capture_output=True, text=True)
+
+    def calls(self):
+        return self.log.read_text(encoding="utf-8") if self.log.exists() else ""
+
+    def test_missing_result_file_is_notified(self):
+        p = self.ship(self.tmp / "no-such-result.json")
+        self.assertNotEqual(p.returncode, 0)
+        self.assertIn("issue create", self.calls())
+        self.assertIn("途中で止まりました", self.calls())
+
+    def test_empty_queue_is_notified(self):
+        res = self.tmp / "result.json"
+        res.write_text(json.dumps({"status": "skipped", "reason": "キューが空"}, ensure_ascii=False), encoding="utf-8")
+        p = self.ship(res)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertIn("テーマがありません", self.calls())
 
 
 if __name__ == "__main__":

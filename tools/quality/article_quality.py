@@ -48,8 +48,9 @@ VAGUE_CELLS = {"", "—", "-", "–", "―", "なし", "特になし", "人に�
                "いろいろ", "さまざま", "様々"}
 SIMILARITY_ERROR = 0.30
 SIMILARITY_WARN = 0.22
-UNIT = (r"(?:g|グラム|mg|ml|mL|ミリリットル|cc|℃|°C|°|度|分|秒|時間|日|週間|か月|ヶ月|カ月|%|L|リットル|cm|mm|倍|kcal|円)")
-NUMBER_WITH_UNIT = re.compile(r"\d+(?:\.\d+)?\s*(?:[〜～~\-]\s*\d+(?:\.\d+)?)?\s*" + UNIT + r"(?![a-zA-Z])")
+UNIT = (r"(?:kg|g|グラム|mg|ml|mL|ミリリットル|cc|℃|°C|°|度|分|秒|時間|日|週間|か月|ヶ月|カ月|%|L|リットル|cm|mm|倍|kcal|円|気圧|回)")
+NUMBER_WITH_UNIT = re.compile(r"\d+(?:\.\d+)?\s*(?:[〜～~\-]\s*\d+(?:\.\d+)?)?\s*" + UNIT + r"(?![a-zA-Z])"
+                              r"|\d+(?:\.\d+)?\s*[:：]\s*\d+(?:\.\d+)?")  # 比率（1:15 など）も数値として扱う
 CITE = re.compile(r"\[\d+\]")
 LINK = re.compile(r"\[\[[^|\]]+\|([^\]]+)\]\]")  # 本文内の記事リンク [[slug|リンク文]]
 
@@ -225,6 +226,11 @@ def evaluate(article, main_kw="", sub_kw="", existing=(), categories=None, limit
         errors.append("形式=比較なのに、3列以上・3行以上の比較表がない")
     if fmt == "トラブル解決" and not any(any("原因" in str(h) for h in b.get("headers", [])) for b in big_tables):
         errors.append("形式=トラブル解決なのに、「原因」の列がある症状別の表がない")
+    if fmt == "基礎知識":
+        first = str(article.get("conclusion", "")) + " ".join(
+            str(b.get("text", "")) for b in (article.get("sections") or [{}])[0].get("blocks", []) if b.get("type") == "p")
+        if not re.search(r"とは|のこと[でを]|を指し|という意味|を意味", first):
+            errors.append("形式=基礎知識なのに、結論か最初のH2に1文での定義（「〜とは」「〜のことです」など）がない")
 
     # キーワード
     title = str(article.get("title", ""))
@@ -237,8 +243,9 @@ def evaluate(article, main_kw="", sub_kw="", existing=(), categories=None, limit
         if found and min(found) > len(title) / 2:
             errors.append("主キーワードがタイトルの後半にしかない（前半に置く）")
         desc = str(article.get("description", ""))
-        if len(missing_tokens(main, desc)) > len(main) // 2:
-            errors.append("主キーワードの語が説明文（description）にほとんど入っていない")
+        miss = missing_tokens(main, desc)
+        if len(miss) > allowed_missing(main):
+            errors.append(f"主キーワードの語が説明文（description）にない: {'・'.join(miss)}")
         opening = str(article.get("conclusion", "")) + str(article.get("lead", ""))
         miss = missing_tokens(main, opening)
         if len(miss) > allowed_missing(main):
@@ -298,6 +305,18 @@ def evaluate(article, main_kw="", sub_kw="", existing=(), categories=None, limit
         for s in re.split(r"(?<=[。！？!?])", str(u)):
             if NUMBER_WITH_UNIT.search(strip_cites(s)) and not CITE.search(s):
                 uncited.append(strip_cites(s).strip()[:40])
+    for u in list(article.get("can_do", [])) + list(article.get("checklist", [])):
+        if NUMBER_WITH_UNIT.search(strip_cites(u)) and not CITE.search(str(u)):
+            uncited.append(strip_cites(u).strip()[:40])
+    cited_numbers = {re.sub(r"\s", "", m.group(0)) for u in body_units(article) + list(article.get("can_do", []))
+                     + list(article.get("checklist", [])) if CITE.search(str(u)) for m in NUMBER_WITH_UNIT.finditer(strip_cites(u))}
+    labels = [article.get("title", ""), article.get("description", ""), article.get("breadcrumb", "")] + headings(article)
+    labels += [f.get("q", "") for f in article.get("faq", [])]
+    labels += [h for _, b in blocks_of(article) if b.get("type") == "table" for h in b.get("headers", [])]
+    for lab in labels:
+        for m in NUMBER_WITH_UNIT.finditer(strip_cites(lab)):
+            if re.sub(r"\s", "", m.group(0)) not in cited_numbers:
+                uncited.append(f"{strip_cites(lab).strip()[:30]}（本文で出典を付けていない数値 {m.group(0)}）")
     metrics["uncited_numbers"] = len(uncited)
     if uncited:
         errors.append(f"出典番号のない数値が{len(uncited)}か所: 「{uncited[0]}」など")
@@ -339,7 +358,9 @@ def evaluate(article, main_kw="", sub_kw="", existing=(), categories=None, limit
         sim = jaccard(mine, trigrams(full_text(other)))
         if sim > best:
             best, best_title = sim, other.get("title", "")
-        head_dups = max(head_dups, len(my_heads & {norm(s.get("heading", "")) for s in other.get("sections", [])}))
+        their_heads = [trigrams(norm(s.get("heading", ""))) for s in other.get("sections", [])]
+        head_dups = max(head_dups, sum(1 for h in my_heads
+                                       if any(jaccard(trigrams(h), t) >= 0.6 for t in their_heads)))
         theirs = set(long_sentences(other))
         reuse["same_sentences"] = max(reuse["same_sentences"], sum(1 for x in my_sents if x in theirs))
         their_tri = [trigrams(x) for x in theirs]
@@ -361,9 +382,9 @@ def evaluate(article, main_kw="", sub_kw="", existing=(), categories=None, limit
     elif best >= SIMILARITY_WARN:
         warnings.append(f"既存記事「{best_title}」と本文がやや似ている（類似度{best:.2f}）")
     if head_dups >= 2:
-        errors.append(f"既存記事とH2見出しが{head_dups}つ同じ")
+        errors.append(f"既存記事とH2見出しが{head_dups}つ同じかほぼ同じ")
     elif head_dups:
-        warnings.append("既存記事と同じH2見出しが1つある")
+        warnings.append("既存記事と同じかほぼ同じH2見出しが1つある")
 
     metrics["chars"] = chars
     if limits:

@@ -108,6 +108,62 @@ class RedTeam(unittest.TestCase):
         self.assertIn("存在しない出典番号", joined(ev(a)))
 
 
+class ProductionLength(unittest.TestCase):
+    """本番と同じ文字数の下限で、実際の長さの良い記事を誤って落とさないこと（E6）。"""
+
+    def test_long_good_article_passes_with_production_limits(self):
+        r = q.evaluate(fx.good_long_mill(), "コーヒーミル 種類 違い", "手挽き 電動 比較;臼式 プロペラ式",
+                       [fx.good_amount(), fx.good_slow_drip()], CATS, q.published_limits())
+        self.assertTrue(r["pass"], r)
+        self.assertEqual(r["warnings"], [])
+
+    def test_short_article_fails_production_length(self):
+        r = q.evaluate(fx.good_amount(), *A_KW, [], CATS, q.published_limits())
+        self.assertIn("本文が短すぎる", joined(r))
+
+
+class EvaluatorFindings(unittest.TestCase):
+    """第三者評価（2026-11-23）で見つかった抜け道。"""
+
+    def test_description_needs_main_keyword(self):
+        a = fx.good_amount()
+        a["description"] = "コーヒー粉を1杯分ずつ計る手順と、濃い・薄いと感じたときにどこを一つずつ変えればよいかを整理します。"
+        self.assertIn("説明文（description）にない", joined(ev(a)))
+
+    def test_numbers_in_checklist_need_citations(self):
+        a = fx.good_amount()
+        a["checklist"].append("お湯を92℃にした")
+        self.assertIn("出典番号のない数値", joined(ev(a)))
+
+    def test_numbers_in_headings_must_be_cited_in_body(self):
+        a = fx.good_amount()
+        a["sections"][1]["heading"] = "3分で終わる計り方"
+        self.assertIn("本文で出典を付けていない数値", joined(ev(a)))
+        a["sections"][1]["heading"] = "湯150mlの計り方"  # 本文で [1] つきで書いている数値は見出しに使える
+        self.assertNotIn("本文で出典を付けていない数値", joined(ev(a)))
+
+    def test_ratio_and_counts_need_citations(self):
+        for sentence in ("粉と湯は1:15にします。", "湯は3回に分けて注ぎます。"):
+            with self.subTest(sentence=sentence):
+                a = fx.good_amount()
+                a["lead"] += sentence
+                self.assertIn("出典番号のない数値", joined(ev(a)))
+
+    def test_near_identical_headings_are_counted(self):
+        a = fx.good_slow_drip()
+        base = fx.good_amount()
+        for i in range(3):
+            a["sections"][i]["heading"] = base["sections"][i]["heading"] + "ポイント"
+        self.assertIn("H2見出しが3つ同じかほぼ同じ", joined(ev(a, B_KW, [base])))
+
+    def test_basics_format_needs_a_definition(self):
+        a = fx.good_amount()
+        a["format"] = "基礎知識"
+        self.assertIn("1文での定義", joined(ev(a)))
+        a["conclusion"] = "コーヒー粉の量の目安とは、湯量に対して粉を何グラム使うかの基準のことです[1]。" + a["conclusion"]
+        self.assertNotIn("1文での定義", joined(ev(a)))
+
+
 class FormatRules(unittest.TestCase):
     def test_comparison_needs_three_column_table(self):
         a = fx.good_amount()

@@ -15,6 +15,12 @@ fi
 echo "== site check =="
 python3 tools/site/check.py
 
+echo "== public files (what deploy.yml publishes) =="
+pub=$(mktemp -d)
+bash tools/site/collect_public.sh "$pub/_site"
+python3 tools/site/check_public.py "$pub/_site"
+rm -rf "$pub"
+
 echo "== article quality gate =="
 python3 tools/quality/article_quality.py --all
 

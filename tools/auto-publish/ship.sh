@@ -4,19 +4,23 @@
 set -euo pipefail
 
 RESULT="$1"
-status=$(jq -r .status "$RESULT")
-slug=$(jq -r '.slug // "none"' "$RESULT")
-auto_merge=$(jq -r '.auto_merge // false' "$RESULT")
 today=$(TZ=Asia/Tokyo date +%F)
-run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+run_url="${GITHUB_SERVER_URL:-}/${GITHUB_REPOSITORY:-}/actions/runs/${GITHUB_RUN_ID:-}"
 out="${GITHUB_OUTPUT:-/dev/null}"
 
 notify() { # $1=title $2=body
   gh issue create --title "$1" --body "$2"$'\n\n'"実行ログ: ${run_url}" --label auto-publish >/dev/null || true
 }
+# 途中で止まったとき（結果ファイルがない、push・PR作成・マージの失敗など）も必ず知らせる（放置運用の前提）
+trap 'notify "自動記事パイプラインが途中で止まりました（${today}）" "tools/auto-publish/ship.sh の ${LINENO} 行目で失敗しました。結果ファイルがない、push・PR作成・マージの失敗などが考えられます。"' ERR
+
+status=$(jq -r .status "$RESULT")
+slug=$(jq -r '.slug // "none"' "$RESULT")
+auto_merge=$(jq -r '.auto_merge // false' "$RESULT")
 
 case "$status" in
-  skipped) echo "nothing to do: $(jq -r .reason "$RESULT")"; exit 0 ;;
+  skipped) notify "自動記事のテーマがありません（${today}）" "キューに「待機」のテーマがなく、自動の補充でも採用されませんでした。docs/auto-queue.csv にテーマを足してください。理由: $(jq -r .reason "$RESULT")"
+           echo "nothing to do: $(jq -r .reason "$RESULT")"; exit 0 ;;
   error)   notify "自動記事パイプラインのエラー（${today}）" "$(jq -r .reason "$RESULT")"; exit 1 ;;
 esac
 

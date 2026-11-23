@@ -133,6 +133,21 @@ class BuildTest(unittest.TestCase):
         self.assertIn('href="category/brew/"', self.page("index.html"))
         self.assert_check_ok()
 
+    def test_published_files_include_every_linked_page(self):
+        self.add_article()
+        self.build()
+        pub = self.tmp / "pub"
+        subprocess.run(["bash", str(self.site / "tools/site/collect_public.sh"), str(pub)], check=True, env=self.env)
+        ok = subprocess.run([sys.executable, str(self.site / "tools/site/check_public.py"), str(pub)], env=self.env,
+                            capture_output=True, text=True)
+        self.assertEqual(ok.returncode, 0, ok.stdout)
+        self.assertTrue((pub / "category/brew/index.html").exists())
+        shutil.rmtree(pub / "category")  # 以前の deploy.yml のように category/ を集め忘れた場合
+        ng = subprocess.run([sys.executable, str(self.site / "tools/site/check_public.py"), str(pub)], env=self.env,
+                            capture_output=True, text=True)
+        self.assertEqual(ng.returncode, 1, ng.stdout)
+        self.assertIn("公開物にない", ng.stdout)
+
     def test_no_category_pages_without_articles(self):
         self.build()
         self.assertFalse((self.site / "category").exists())

@@ -24,11 +24,7 @@ jobs:
         with:
           ref: main
       - name: Collect public files
-        run: |
-          mkdir _site
-          cp -r index.html about.html privacy.html disclaimer.html 404.html sitemap.xml robots.txt css js images _site/
-          [ -d column ] && cp -r column _site/ || true
-          touch _site/.nojekyll
+        run: bash tools/site/collect_public.sh _site
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
