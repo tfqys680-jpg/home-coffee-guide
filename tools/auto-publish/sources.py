@@ -68,3 +68,63 @@ def fetch_source(url):
             return True, text[:EXCERPT_CHARS]
     except Exception as ex:  # noqa: BLE001
         return False, f"取得失敗: {ex}"[:200]
+
+
+# ---------------------------------------------------------------- 出典リストと自動調査
+
+REGISTRY = "docs/sources.json"
+
+
+def _root():
+    return Path(os.environ.get("SITE_ROOT", Path(__file__).resolve().parents[2]))
+
+
+def load_registry():
+    p = _root() / REGISTRY
+    return json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
+
+
+def save_registry(reg):
+    (_root() / REGISTRY).write_text(json.dumps(reg, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+
+
+def gather_sources(task, cfg, ask_search, research_prompt):
+    """テーマの出典をそろえる。出典リスト → 足りなければ自動調査（ask_search）。
+
+    戻り値: (確認済みの出典 [{"title","url","note","excerpt"}], 経過のメモ [str])。
+    自動調査で確認できた出典は出典リストに found_by="auto" で書き戻す。
+    """
+    slug = task["slug"]
+    need = cfg["min_verified_sources"]
+    limit = cfg.get("max_sources_per_article", 5)
+    reg = load_registry()
+    verified, notes, seen = [], [], set()
+
+    def try_add(entry, origin):
+        url = str(entry.get("url", "")).strip()
+        if not url or _key(url) in seen or len(verified) >= limit:
+            return False
+        seen.add(_key(url))
+        ok, text = fetch_source(url)
+        if not ok:
+            notes.append(f"出典を確認できない（{origin}）: {url} {text}")
+            return False
+        verified.append({"title": entry.get("title", ""), "url": url, "note": entry.get("note", ""), "excerpt": text})
+        return True
+
+    for entry in reg.get(slug, []):
+        try_add(entry, "出典リスト")
+    from_list = len(verified)
+    if len(verified) < need:
+        try:
+            found = ask_search(research_prompt(task)).get("sources") or []
+        except Exception as ex:  # noqa: BLE001  調査の失敗はテーマの出典不足として扱う
+            found = []
+            notes.append(f"自動調査に失敗: {ex}"[:300])
+        added = [e for e in found if isinstance(e, dict) and try_add(e, "自動調査")]
+        if added:
+            reg.setdefault(slug, []).extend(
+                {"title": e.get("title", ""), "url": e["url"].strip(), "note": e.get("note", ""), "found_by": "auto"} for e in added)
+            save_registry(reg)
+    notes.insert(0, f"出典: 出典リストで{from_list}件・自動調査で{len(verified) - from_list}件を確認（{need}件以上必要）")
+    return verified, notes

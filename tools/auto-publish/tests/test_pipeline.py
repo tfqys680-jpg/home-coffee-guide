@@ -50,12 +50,24 @@ def broken(article):
     return a
 
 
-def write_fixtures(d, writer, reviews):
+EXTRA_URL = "https://www.example.com/unlisted"  # 取得はできるが、確認済み一覧には入っていない出典
+BROKEN_URL = "https://www.example.org/broken"  # 取得できない出典（本番のボット拒否・404 にあたる）
+
+
+def mock_sources_table():
+    table = {u: f"出典本文（{u}）" + "粉10gに湯150ml。" * 60 for u in SRC_URLS}
+    table[EXTRA_URL] = "一覧にない出典の本文" * 60
+    return table
+
+
+def write_fixtures(d, writer, reviews, research=()):
     d.mkdir(parents=True, exist_ok=True)
     (d / "openai_1.json").write_text(json.dumps(writer, ensure_ascii=False), encoding="utf-8")
     for i, r in enumerate(reviews, 1):
         (d / f"claude_{i}.json").write_text(json.dumps(r, ensure_ascii=False), encoding="utf-8")
-    (d / "sources.json").write_text(json.dumps({u: "出典本文" * 100 for u in SRC_URLS}, ensure_ascii=False), encoding="utf-8")
+    for i, r in enumerate(research, 1):
+        (d / f"research_{i}.json").write_text(json.dumps(r, ensure_ascii=False), encoding="utf-8")
+    (d / "sources.json").write_text(json.dumps(mock_sources_table(), ensure_ascii=False), encoding="utf-8")
 
 
 class PipelineTest(unittest.TestCase):
@@ -69,6 +81,7 @@ class PipelineTest(unittest.TestCase):
             "slug,テーマ,主キーワード,補助キーワード,想定読者,YMYL区分,状態,備考\n"
             + "".join(f"{s},試験テーマ{i},{kw},{sub},試験読者,低,待機,試験\n" for i, (s, kw, sub) in enumerate(QUEUE, 1)),
             encoding="utf-8")
+        self.write_registry({slug: [dict(src, found_by="manual") for src in fx.SRC] for slug in SLUGS})
         # 見本原稿は短いので、文字数の下限だけテスト用に下げる（品質ゲートの他の基準はそのまま）
         cfg_path = self.site / "tools/auto-publish/config.json"
         cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
@@ -78,9 +91,25 @@ class PipelineTest(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
-    def run_pipeline(self, n, writer, reviews):
+    def write_registry(self, reg):
+        (self.site / "docs/sources.json").write_text(json.dumps(reg, ensure_ascii=False, indent=1), encoding="utf-8")
+
+    def registry(self):
+        return json.loads((self.site / "docs/sources.json").read_text(encoding="utf-8"))
+
+    def write_queue(self, rows):
+        (self.site / "docs/auto-queue.csv").write_text(
+            "slug,テーマ,主キーワード,補助キーワード,想定読者,YMYL区分,状態,備考\n"
+            + "".join(f"{s},試験テーマ{i},{kw},{sub},試験読者,低,待機,試験\n" for i, (s, kw, sub) in enumerate(rows, 1)),
+            encoding="utf-8")
+
+    def requests_log(self, n):
+        p = self.tmp / f"fx{n}" / "requests.log"
+        return p.read_text(encoding="utf-8") if p.exists() else ""
+
+    def run_pipeline(self, n, writer, reviews, research=()):
         fx_dir = self.tmp / f"fx{n}"
-        write_fixtures(fx_dir, writer, reviews)
+        write_fixtures(fx_dir, writer, reviews, research)
         env = dict(os.environ, SITE_ROOT=str(self.site), AUTO_PUBLISH_MOCK=str(fx_dir), AUTO_PUBLISH_DATE=f"2026-11-1{n}",
                    PYTHONDONTWRITEBYTECODE="1")
         res = self.tmp / f"result{n}.json"
@@ -166,10 +195,11 @@ class PipelineTest(unittest.TestCase):
         d = self.tmp / "fx-refill"
         d.mkdir()
         files = {"openai_1.json": {"topics": [topic]}, "claude_1.json": {"topics": [topic], "rejected": []},
-                 "openai_2.json": art, "claude_2.json": review(art)}
+                 "openai_2.json": art, "claude_2.json": review(art),
+                 "research_1.json": {"sources": copy.deepcopy(fx.SRC)}}
         for name, body in files.items():
             (d / name).write_text(json.dumps(body, ensure_ascii=False), encoding="utf-8")
-        (d / "sources.json").write_text(json.dumps({u: "出典本文" * 100 for u in SRC_URLS}, ensure_ascii=False), encoding="utf-8")
+        (d / "sources.json").write_text(json.dumps(mock_sources_table(), ensure_ascii=False), encoding="utf-8")
         env = dict(os.environ, SITE_ROOT=str(self.site), AUTO_PUBLISH_MOCK=str(d), AUTO_PUBLISH_DATE="2026-11-24",
                    PYTHONDONTWRITEBYTECODE="1")
         res = self.tmp / "result-refill.json"
@@ -181,6 +211,8 @@ class PipelineTest(unittest.TestCase):
         self.assertIn("coffee-mill-types,コーヒーミルの種類と選び方", self.queue())
         self.assertIn("公開(2026-11-24)", self.queue())
         self.assertTrue((self.site / "category/tools/index.html").exists())
+        self.assertEqual([e["found_by"] for e in self.registry()["coffee-mill-types"]], ["auto"] * 3,
+                         "自動調査で確認できた出典が出典リストに書き戻されていない")
         self.check_site()
 
     # ---- 品質ゲート（D2: 落ちたら指摘を渡して1回推敲し直す）
@@ -217,6 +249,59 @@ class PipelineTest(unittest.TestCase):
         r = self.run_pipeline(2, dup, [review(dup), review(dup)])
         self.assertEqual(r["status"], "blocked")
         self.assertIn("似すぎている", r["reason"])
+
+    # ---- 出典を先にそろえてから書く（docs/superpowers/specs/2026-11-23-source-registry-design.md）
+    def test_writer_receives_verified_source_excerpts(self):
+        self.assertEqual(self.publish(1)["status"], "created")
+        sent = self.requests_log(1)
+        self.assertIn(fx.SRC[0]["url"], sent)
+        self.assertIn("粉10gに湯150ml。", sent, "ChatGPTへの依頼に出典の本文抜粋が入っていない")
+
+    def test_registry_source_that_fails_falls_back_to_research_and_is_saved(self):
+        self.write_registry({SLUGS[0]: [{"title": "取得できない", "url": BROKEN_URL, "note": "", "found_by": "manual"}]})
+        found = copy.deepcopy(fx.SRC) + [copy.deepcopy(fx.SRC[0]), {"title": "同じページ", "url": fx.SRC[1]["url"] + "/", "note": ""},
+                                         {"title": "取得できない", "url": "https://www.example.go.jp/missing", "note": ""}]
+        art = sample_article(1)
+        r = self.run_pipeline(1, art, [review(art)], research=[{"sources": found}])
+        self.assertEqual(r["status"], "created", r)
+        saved = self.registry()[SLUGS[0]]
+        self.assertEqual([e["url"] for e in saved], [BROKEN_URL] + SRC_URLS, "重複や取得できない候補まで書き戻している")
+        self.assertEqual([e["found_by"] for e in saved], ["manual", "auto", "auto", "auto"])
+
+    def test_topic_without_sources_is_skipped_to_next_topic(self):
+        self.write_registry({SLUGS[1]: [dict(src, found_by="manual") for src in fx.SRC]})
+        art = sample_article(2)
+        r = self.run_pipeline(1, art, [review(art)], research=[{"sources": [{"title": "x", "url": BROKEN_URL, "note": ""}]}])
+        self.assertEqual(r["status"], "created", r)
+        self.assertEqual(r["slug"], SLUGS[1])
+        self.assertIn(f"{SLUGS[0]},試験テーマ1,", self.queue())
+        self.assertIn("出典不足(2026-11-11)", self.queue())
+        self.assertIn("出典がそろわない", self.runlog())
+
+    def test_research_answer_without_sources_means_shortage(self):
+        self.write_registry({})
+        r = self.run_pipeline(1, sample_article(1), [], research=[{"note": "見つからない"}, {}])
+        self.assertEqual(r["status"], "blocked", r)
+        self.assertIn("出典がそろわない", r["reason"])
+        self.assertEqual(self.queue().count("出典不足(2026-11-11)"), 2)
+        self.assertFalse((self.site / "column").exists() and any((self.site / "column").glob("zz-test-*")))
+
+    def test_at_most_three_topics_are_tried_per_run(self):
+        self.write_registry({})
+        rows = [(f"zz-test-topic-{i}", f"試験 キーワード{i}", "補助") for i in range(1, 5)]
+        self.write_queue(rows)
+        r = self.run_pipeline(1, sample_article(1), [], research=[{"sources": []}] * 3)
+        self.assertEqual(r["status"], "blocked", r)
+        q = self.queue()
+        self.assertEqual(q.count("出典不足(2026-11-11)"), 3)
+        self.assertIn("zz-test-topic-4,試験テーマ4,試験 キーワード4,補助,試験読者,低,待機", q)
+
+    def test_source_outside_verified_list_is_held(self):
+        art = sample_article(1)
+        art["sources"].append({"title": "一覧にない出典", "url": EXTRA_URL, "note": "追加"})
+        r = self.run_pipeline(1, art, [review(art), review(art)])
+        self.assertEqual(r["status"], "blocked", r)
+        self.assertIn("確認済み一覧にない出典", r["reason"])
 
 
 class SourceFetchTest(unittest.TestCase):
