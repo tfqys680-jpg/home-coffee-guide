@@ -8,5 +8,32 @@
   "description": "家でコーヒーを淹れ始めた人のための実用ガイド。ハンドドリップの手順、豆の選び方と保存、器具の違いを、出典を確認しながら分かりやすくまとめます。",
   "ga_id": "",
   "gsc_verification": "",
-  "operator_profile": []
+  "operator_profile": [],
+  "categories": [
+    {
+      "slug": "brew",
+      "name": "淹れ方",
+      "description": "ハンドドリップやフレンチプレスなど、家での淹れ方の手順と、うまくいかないときの直し方。"
+    },
+    {
+      "slug": "beans",
+      "name": "豆と焙煎",
+      "description": "豆の焙煎度や挽き目の違いと、好みに合わせた選び方。"
+    },
+    {
+      "slug": "tools",
+      "name": "器具",
+      "description": "ドリッパー・ミル・ケトルなど、器具の種類ごとの違いと使い方。"
+    },
+    {
+      "slug": "storage",
+      "name": "保存",
+      "description": "豆や粉、作ったコーヒーの保存方法と保存期間の考え方。"
+    },
+    {
+      "slug": "caffeine",
+      "name": "カフェイン",
+      "description": "カフェインの量やデカフェなど、飲み方に関わる情報。公的機関の情報をもとにまとめます。"
+    }
+  ]
 }

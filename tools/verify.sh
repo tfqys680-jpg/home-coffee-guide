@@ -15,8 +15,14 @@ fi
 echo "== site check =="
 python3 tools/site/check.py
 
+echo "== article quality gate =="
+python3 tools/quality/article_quality.py --all
+
 echo "== pipeline tests =="
 python3 tools/auto-publish/tests/test_pipeline.py
 
 echo "== build tests =="
 python3 tools/site/tests/test_build.py
+
+echo "== quality gate tests =="
+python3 tools/quality/tests/test_quality.py

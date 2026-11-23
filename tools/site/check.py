@@ -3,7 +3,7 @@
 
 - 各ページ: title / description / canonical / h1が1つ / タイトル重複なし
 - 内部リンク切れなし、JSON-LDが読める、パンくずの表示とJSON-LDが一致
-- 記事ページがトップとsitemapから辿れる
+- 記事ページがトップ・カテゴリページ・sitemapから辿れる
 - 記事本文に禁止表現（健康効果の断定など）がない
 - 画像ファイルが存在し、alt が空でない
 - 運営者の確認メモ（運営者本人が書く欄）は体験の表現だけを許し、健康効果の断定などは本文と同じく禁止
@@ -98,8 +98,17 @@ def main():
             errors.append(f"column/{d.name}/ がトップから辿れない")
         if f"column/{d.name}/</loc>" not in sitemap:
             errors.append(f"column/{d.name}/ が sitemap にない")
-        if not (ROOT / "content/articles" / f"{d.name}.json").exists():
+        src = ROOT / "content/articles" / f"{d.name}.json"
+        if not src.exists():
             errors.append(f"column/{d.name}/ に対応する記事JSONがない")
+            continue
+        cat = json.loads(src.read_text(encoding="utf-8"))["article"].get("category")
+        if cat:
+            page = ROOT / "category" / cat / "index.html"
+            if not page.exists() or f'href="../../column/{d.name}/"' not in page.read_text(encoding="utf-8"):
+                errors.append(f"column/{d.name}/ がカテゴリページ category/{cat}/ から辿れない")
+            if f"category/{cat}/</loc>" not in sitemap:
+                errors.append(f"category/{cat}/ が sitemap にない")
 
     print(f"pages: {len(pages)}")
     if errors:

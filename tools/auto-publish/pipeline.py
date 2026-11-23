@@ -29,11 +29,13 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent / "site"))
+sys.path.insert(0, str(HERE.parent / "quality"))
 import prompts  # noqa: E402
 
 ROOT = Path(os.environ.get("SITE_ROOT", HERE.parents[1]))
 os.environ.setdefault("SITE_ROOT", str(ROOT))
 import build  # noqa: E402
+import article_quality  # noqa: E402
 
 JST = dt.timezone(dt.timedelta(hours=9))
 MOCK = os.environ.get("AUTO_PUBLISH_MOCK")
@@ -252,12 +254,50 @@ def validate(article, cfg, existing_slugs):
     for slug in article.get("related", []):
         if slug not in existing_slugs:
             errs.append(f"存在しない関連記事: {slug}")
+    for slug in re.findall(r"\[\[([^|\]]+)\|", text):
+        if slug not in existing_slugs:
+            errs.append(f"本文のリンク先の記事がない: {slug}")
     if any(build.plain(a["article"]["title"]) == build.plain(article.get("title", "")) for a in existing_articles()):
         errs.append("既存記事とタイトルが重複")
     body_len = sum(len(x) for x in text.split("\n"))
     if body_len < cfg["min_body_chars"]:
         errs.append(f"本文が短すぎる（{body_len}字）")
     return errs
+
+
+def categories():
+    return [c["slug"] for c in build.load_site().get("categories", [])]
+
+
+def categories_text():
+    return "\n".join(f"- {c['slug']}: {c['name']}（{c.get('description', '')}）" for c in build.load_site().get("categories", []))
+
+
+def existing_headings(existing):
+    lines = [f"- {a['article']['title']}: " + " / ".join(build.plain(s["heading"]) for s in a["article"].get("sections", []))
+             for a in existing]
+    return "\n".join(lines) or "（まだありません）"
+
+
+def coverage_errors(review):
+    """審査（Claude）が返す競合カバーの自己点検を確かめる。"""
+    errs = []
+    cov = review.get("coverage") or []
+    if len(cov) < 5:
+        errs.append(f"検索上位の記事が扱う論点の確認が{len(cov)}件（5件以上必要）")
+    missing = [c.get("point", "") for c in cov if not c.get("covered") and not str(c.get("note", "")).strip()]
+    if missing:
+        errs.append(f"検索上位の記事が扱う論点を扱っていない: {'・'.join(missing[:3])}")
+    if sum(1 for c in cov if not c.get("covered")) > 2:
+        errs.append("検索上位の記事が扱う論点のうち、扱っていないものが3つ以上ある")
+    if not str(review.get("unique_value", "")).strip():
+        errs.append("上位記事にない、この記事ならではの要素がない")
+    return errs
+
+
+def quality_check(article, task, existing):
+    return article_quality.evaluate(article, task["主キーワード"], task["補助キーワード"],
+                                    [a["article"] for a in existing], categories())
 
 
 def append_run_log(date, lines):
@@ -283,30 +323,52 @@ def run():
 
     related_list = "\n".join(f"- {a['slug']}: {a['article']['title']}" for a in existing) or "（まだありません）"
     existing_desc = existing_text()
-    article = ask_openai(prompts.WRITER_SYSTEM.replace("__RELATED__", related_list), prompts.WRITER_USER.format(
+    writer_system = prompts.WRITER_SYSTEM.replace("__RELATED__", related_list).replace("__CATEGORIES__", categories_text())
+    article = ask_openai(writer_system, prompts.WRITER_USER.format(
         theme=task["テーマ"], main_kw=task["主キーワード"], sub_kw=task["補助キーワード"],
-        reader=task["想定読者"], notes=task["備考"], existing=existing_desc))
+        reader=task["想定読者"], notes=task["備考"], existing=existing_desc, existing_headings=existing_headings(existing)))
 
-    fetched, issues, verdict, ymyl = {}, [], "BLOCK", task["YMYL区分"]
-    for _ in range(cfg["max_review_rounds"]):
+    fetched, issues, verdict, ymyl, review = {}, [], "BLOCK", task["YMYL区分"], {}
+
+    def source_report():
         for s in article.get("sources", []):
             if s.get("url") and s["url"] not in fetched:
                 fetched[s["url"]] = fetch_source(s["url"])
-        report = "\n\n".join(
+        return "\n\n".join(
             f"### [{i}] {s.get('title')} {s.get('url')}\nverified={fetched.get(s.get('url'), (False, ''))[0]}\n"
             f"{fetched.get(s.get('url'), (False, '未取得'))[1]}" for i, s in enumerate(article.get("sources", []), 1))
-        review = ask_claude(prompts.REVIEWER_SYSTEM, prompts.REVIEWER_USER.format(
-            theme=task["テーマ"], main_kw=task["主キーワード"], existing=existing_desc,
-            article=json.dumps(article, ensure_ascii=False, indent=1), sources=report))
-        m = re.search(r"PASS|REVISE|BLOCK", str(review.get("verdict", "")).upper())
+
+    def apply_review(r):
+        nonlocal article, verdict, ymyl, review
+        review = r
+        m = re.search(r"PASS|REVISE|BLOCK", str(r.get("verdict", "")).upper())
         verdict = m.group(0) if m else "BLOCK"
-        issues += [str(x) for x in review.get("issues", [])]
-        article = review.get("article") or article
-        ymyl = max([str(review.get("ymyl", "中")), task["YMYL区分"]], key=lambda x: YMYL_ORDER.get(x, 1))
+        issues.extend(str(x) for x in r.get("issues", []))
+        article = r.get("article") or article
+        ymyl = max([str(r.get("ymyl", "中")), task["YMYL区分"], ymyl], key=lambda x: YMYL_ORDER.get(x, 1))
+
+    for _ in range(cfg["max_review_rounds"]):
+        apply_review(ask_claude(prompts.REVIEWER_SYSTEM, prompts.REVIEWER_USER.format(
+            theme=task["テーマ"], main_kw=task["主キーワード"], existing=existing_desc,
+            article=json.dumps(article, ensure_ascii=False, indent=1), sources=source_report())))
         if verdict != "REVISE":
             break
 
+    # 品質ゲート（決定論）。落ちたら指摘を渡して推敲し直す（max_quality_rounds 回まで）
+    quality = quality_check(article, task, existing)
+    for _ in range(cfg.get("max_quality_rounds", 1)):
+        problems = quality["errors"] + coverage_errors(review)
+        if verdict != "PASS" or not problems:
+            break
+        apply_review(ask_claude(prompts.REVIEWER_SYSTEM, prompts.QUALITY_FIX_USER.format(
+            theme=task["テーマ"], main_kw=task["主キーワード"], sub_kw=task["補助キーワード"], existing=existing_desc,
+            errors="\n".join(f"- {x}" for x in problems), article=json.dumps(article, ensure_ascii=False, indent=1),
+            sources=source_report())))
+        quality = quality_check(article, task, existing)
+
     errs = validate(article, cfg, existing_slugs)
+    errs += [f"品質ゲート: {x}" for x in quality["errors"]]
+    errs += [f"競合との比較: {x}" for x in coverage_errors(review)]
     unverified = [s.get("url") for s in article.get("sources", []) if not fetched.get(s.get("url"), (False,))[0]]
     if unverified:
         errs.append(f"取得確認できない出典が残っている: {unverified}")
@@ -316,6 +378,12 @@ def run():
     log = [f"テーマ: {task['テーマ']}（column/{slug}/）", f"Claude審査: {verdict}／YMYL: {ymyl}",
            f"出典の取得確認: {sum(1 for v in fetched.values() if v[0])}/{len(fetched)}件"]
     log += [f"審査指摘: {x}" for x in issues[:20]]
+    log.append("品質ゲート: " + ("合格" if quality["pass"] else "不合格") + f"（{json.dumps(quality['metrics'], ensure_ascii=False)}）")
+    log += [f"品質ゲートの注意: {x}" for x in quality["warnings"]]
+    log += [f"競合の論点: {c.get('point')}（{'扱った' if c.get('covered') else '扱わない: ' + str(c.get('note', ''))}）"
+            for c in review.get("coverage", [])]
+    if review.get("unique_value"):
+        log.append(f"独自の要素: {review['unique_value']}")
 
     if errs:
         set_queue_status(cfg, slug, f"保留({date.isoformat()})")
@@ -328,7 +396,10 @@ def run():
     auto_merge = cfg["auto_merge"] and ymyl in cfg["auto_merge_ymyl_levels"]
     related = [r for r in article.pop("related", []) if r in existing_slugs]
     item = {"slug": slug, "date": date.isoformat(), "updated": date.isoformat(), "ymyl": ymyl, "main_kw": task["主キーワード"],
-            "related": related, "pipeline": {"writer": "ChatGPT", "reviewer": "Claude", "verdict": verdict, "issues": issues},
+            "sub_kw": task["補助キーワード"], "related": related,
+            "pipeline": {"writer": "ChatGPT", "reviewer": "Claude", "verdict": verdict, "issues": issues,
+                         "coverage": review.get("coverage", []), "unique_value": review.get("unique_value", ""),
+                         "quality": quality["metrics"]},
             "article": article}
     (ROOT / "content/articles").mkdir(parents=True, exist_ok=True)
     (ROOT / "content/articles" / f"{slug}.json").write_text(json.dumps(item, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
