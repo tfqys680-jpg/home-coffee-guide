@@ -64,7 +64,7 @@ def main():
             if data.get("@type") == "BreadcrumbList":
                 dom = re.search(r'<nav class="breadcrumb"[^>]*><ol>(.*?)</ol>', src, re.S)
                 dom_names = [text_of(x) for x in re.findall(r"<li>(.*?)</li>", dom.group(1), re.S)] if dom else []
-                ld_names = [x["name"] for x in data["itemListElement"]]
+                ld_names = [text_of(x["name"]) for x in data["itemListElement"]]  # 表示側と同じ正規化で比べる
                 if dom_names != ld_names:
                     errors.append(f"{rel}: パンくずの表示とJSON-LDが不一致 {dom_names} != {ld_names}")
         if rel == "404.html":

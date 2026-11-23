@@ -148,6 +148,13 @@ class BuildTest(unittest.TestCase):
         self.assertEqual(ng.returncode, 1, ng.stdout)
         self.assertIn("公開物にない", ng.stdout)
 
+    def test_full_width_breadcrumb_passes_check(self):
+        art = sample_article()
+        art["breadcrumb"] = "粉の量（1杯分）"
+        self.add_article(article=art)
+        self.build()
+        self.assert_check_ok()
+
     def test_no_category_pages_without_articles(self):
         self.build()
         self.assertFalse((self.site / "category").exists())
