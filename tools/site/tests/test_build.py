@@ -31,6 +31,10 @@ class BuildTest(unittest.TestCase):
         self.tmp = Path(tempfile.mkdtemp(prefix="coffee-build-test-"))
         self.site = self.tmp / "site"
         shutil.copytree(REPO, self.site, ignore=shutil.ignore_patterns(".git", "__pycache__"))
+        for article in (self.site / "content/articles").glob("*.json"):
+            article.unlink()
+        for generated in ("column", "category"):
+            shutil.rmtree(self.site / generated, ignore_errors=True)
         self.env = dict(os.environ, SITE_ROOT=str(self.site), PYTHONDONTWRITEBYTECODE="1")
         # 本番の site.json に値が入っていても、既定の挙動を試せるよう空に戻す
         self.set_site(gsc_verification="", operator_profile=[])
@@ -45,11 +49,13 @@ class BuildTest(unittest.TestCase):
         site.update(kv)
         p.write_text(json.dumps(site, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
-    def add_article(self, operator=None, article=None):
+    def add_article(self, operator=None, article=None, review_mode=None):
         item = {"slug": SLUG, "date": "2026-11-20", "updated": "2026-11-20", "ymyl": "低", "main_kw": "試験",
                 "related": [], "article": article or sample_article()}
         if operator is not None:
             item["operator"] = operator
+        if review_mode is not None:
+            item["review_mode"] = review_mode
         d = self.site / "content/articles"
         d.mkdir(parents=True, exist_ok=True)
         (d / f"{SLUG}.json").write_text(json.dumps(item, ensure_ascii=False, indent=1), encoding="utf-8")
@@ -190,6 +196,21 @@ class BuildTest(unittest.TestCase):
         self.assertEqual(self.article_ld()["image"], ["https://tfqys680-jpg.github.io/home-coffee-guide/images/ogp.png"])
         self.assertIn('<meta property="og:image" content="https://tfqys680-jpg.github.io/home-coffee-guide/images/ogp.png">', page)
         self.assert_check_ok()
+
+    def test_manual_review_does_not_claim_automated_claude_review(self):
+        self.add_article(review_mode="manual")
+        self.build()
+        page = self.page(f"column/{SLUG}/index.html")
+        self.assertIn("出典ページの本文を確認して編集しました", page)
+        self.assertIn("人による実際の試飲や器具のテストは行っていません", page)
+        self.assertIn("（出典ページの本文を確認）", page)
+        self.assertNotIn("Claude", page)
+        self.assertNotIn("出典ページを自動で取得", page)
+        self.add_article()
+        self.build()
+        auto = self.page(f"column/{SLUG}/index.html")
+        self.assertIn("Claude", auto)
+        self.assertIn("出典ページを自動で取得", auto)
 
     def test_operator_note_and_photo_rendered(self):
         src = self.add_photo()
