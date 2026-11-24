@@ -5,7 +5,9 @@
   "review_mode": "manual",
   "main_kw": "ハンドドリップ",
   "sub_kw": "挽き目",
-  "related": [],
+  "related": [
+    "french-press-how-to"
+  ],
   "article": {
     "title": "ハンドドリップは、注ぐ速さ・挽き目・フィルターでどう変わる？",
     "breadcrumb": "ハンドドリップの味を比べる",

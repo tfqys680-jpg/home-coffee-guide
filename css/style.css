@@ -297,3 +297,4 @@ a { text-underline-offset: .25em; }
   .blueprint-enhanced .blueprint-render { display: none; }
   .blueprint-enhanced .blueprint-wire { opacity: 1; }
 }
+.press-steps img { aspect-ratio: 720 / 230; height: auto; background: #fff; }

@@ -181,6 +181,7 @@ def render_operator(site, op, rel):
 
 
 BREW_FEATURE = "hand-drip-taste-adjustment"
+PRESS_GUIDE = "french-press-how-to"
 EDITORIAL = "images/editorial/"
 
 
@@ -257,6 +258,13 @@ def render_article(site, item, by_slug):
         heading = plain(section["heading"])
         anchor = BREW_TOPIC_ANCHORS.get(heading) if slug == BREW_FEATURE else None
         content = "\n".join(render_block(b) for b in section.get("blocks", []))
+        if slug == PRESS_GUIDE and heading == "粉を入れ、待ってからゆっくり押す":
+            image = asset_url(f"{EDITORIAL}french-press-steps.svg", "../../")
+            content = (f'<figure class="brew-overview press-steps"><img src="{image}" '
+                       'alt="粉を湯に浸し、金属網を上げて待ち、最後にゆっくり押し下げる三工程の線画" '
+                       'width="720" height="230" loading="lazy" decoding="async">'
+                       '<figcaption>粉を湯に浸す → 網を上げて待つ → 最後にゆっくり押す。</figcaption></figure>\n'
+                       + content)
         # Keep #secN on the heading for older direct links.
         markup = f'<h2 id="sec{i}">{e(heading)}</h2>\n{content}'
         return f'<section id="{anchor}" aria-labelledby="sec{i}">{markup}</section>' if anchor else markup
