@@ -186,6 +186,30 @@ class BuildTest(unittest.TestCase):
             self.assertEqual(hashlib.sha256((vendor / name).read_bytes()).hexdigest(), digest)
         self.assertIn('from"./three.core.js"', self.page("js/vendor/three.module.min.js"))
 
+    def test_hand_drip_quick_recipe_moves_up_without_renumbering_anchors(self):
+        for slug in ("french-press-how-to", "hand-drip-taste-adjustment"):
+            fixture = REPO / "content" / "articles" / f"{slug}.json"
+            (self.site / "content" / "articles" / fixture.name).write_bytes(fixture.read_bytes())
+        self.build()
+        guide = self.page("column/hand-drip-taste-adjustment/index.html")
+        self.assertEqual(guide.count('id="sec5"'), 1)
+        self.assertIn('href="#sec5"', guide)
+        self.assertLess(guide.index('id="sec5"'), guide.index('class="summary"'))
+        self.assertLess(guide.index('class="brew-measures"'), guide.index('class="ai-note"'))
+        self.assertEqual(guide.count('class="ai-note"'), 1)
+        self.assertLess(guide.index('id="sec5"'), guide.index('id="brew-studio-title"'))
+        for i, anchor in enumerate(("brew-pour", "brew-grind", "brew-filter"), 1):
+            self.assertIn(f'<section id="{anchor}" aria-labelledby="sec{i}"><h2 id="sec{i}">', guide)
+        quick = guide.split('class="brew-basics"', 1)[1].split("</section>", 1)[0]
+        for value in ("中挽き10g", "150〜160mL", "約90℃", "蒸らし 約20秒", "全体 約3分"):
+            self.assertIn(value, quick.split("</dl>", 1)[0])
+        self.assertIn("カルディの指定ではありません", quick)
+        self.assertIn('href="#source11"', quick)
+        self.assertIn('href="../french-press-how-to/"', quick)
+        self.assertLess(quick.index("A：基準"), quick.index("粉の細かさで迷ったら"))
+        self.assertIn("極細挽き", quick)
+        self.assertIn("多孔質セラミック", quick)
+
     def test_french_press_reachable_with_diagram_and_sources(self):
         for slug in ("french-press-how-to", "hand-drip-taste-adjustment"):
             fixture = REPO / "content" / "articles" / f"{slug}.json"
