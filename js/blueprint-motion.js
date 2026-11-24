@@ -1,6 +1,6 @@
 // A progressive, decorative enhancement: the labeled static SVG is always present.
-const hero = document.querySelector(".blueprint-hero");
-const figure = hero?.querySelector(".blueprint-figure");
+const panel = document.querySelector(".ed-extraction");
+const figure = panel?.querySelector(".blueprint-figure");
 const mount = figure?.querySelector(".blueprint-render");
 const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
 const vendor = (file) => new URL(`./vendor/${file}`, import.meta.url);
@@ -49,8 +49,8 @@ function makeWire(THREE, context, canvas) {
   const scene = new THREE.Scene();
   const equipment = new THREE.Group();
   scene.add(equipment);
-  const line = new THREE.LineBasicMaterial({color: 0xc1ff9e});
-  const light = new THREE.LineBasicMaterial({color: 0xc1ff9e, transparent: true, opacity: 0.52});
+  const line = new THREE.LineBasicMaterial({color: 0x654935});
+  const light = new THREE.LineBasicMaterial({color: 0x654935, transparent: true, opacity: 0.52});
   const geometries = [];
   const mesh = (rings, count, width, material) => {
     const geometry = modelGeometry(THREE, rings, count, width);
@@ -101,6 +101,7 @@ function makeWire(THREE, context, canvas) {
 let stop;
 let pending;
 let permanentFallback = false;
+let inRange = false;
 
 async function start() {
   const canvas = document.createElement("canvas");
@@ -155,7 +156,7 @@ async function start() {
     // paused; ScrollMagic is the clock rather than a continuous JS render loop.
     tween = TweenMax.to(values, {duration: 1, phase: 1, depth: 14, paused: true, ease: "none", onUpdate: render});
     controller = new ScrollMagic.Controller({refreshInterval: 0});
-    scrollScene = new ScrollMagic.Scene({triggerElement: hero, triggerHook: 0, duration: () => Math.max(1, hero.offsetHeight)})
+    scrollScene = new ScrollMagic.Scene({triggerElement: panel, triggerHook: .82, duration: () => Math.max(1, panel.offsetHeight + window.innerHeight * .22)})
       .on("progress", (event) => tween.progress(event.progress))
       .addTo(controller);
     controller.update(true);
@@ -178,13 +179,23 @@ function syncMotion() {
   if (motion.matches) {
     stop?.();
     stop = undefined;
-  } else if (!stop && !pending && !permanentFallback) {
+  } else if (inRange && !stop && !pending && !permanentFallback) {
     pending = start().catch(() => { permanentFallback = true; })
       .finally(() => { pending = undefined; });
   }
 }
 if (mount) {
   motion.addEventListener("change", syncMotion);
-  if (document.readyState === "complete") syncMotion();
-  else window.addEventListener("load", syncMotion, {once: true});
+  if ("IntersectionObserver" in window) {
+    const observer = new IntersectionObserver((entries) => {
+      if (!entries.some((entry) => entry.isIntersecting)) return;
+      observer.disconnect();
+      inRange = true;
+      syncMotion();
+    }, {rootMargin: "180px 0px"});
+    observer.observe(panel);
+  } else {
+    // Static art remains sufficient on older browsers.
+    inRange = false;
+  }
 }
