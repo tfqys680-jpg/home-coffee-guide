@@ -5,6 +5,7 @@
 実行: python3 tools/site/tests/test_build.py
 """
 import hashlib
+import hashlib
 import importlib.util
 import json
 import os
@@ -95,6 +96,8 @@ class BuildTest(unittest.TestCase):
         self.build()
         self.assertIn('href="#articles"', self.page("index.html"))
         self.assertNotIn('id="blueprint-workbench"', self.page("index.html"))
+        self.assertNotIn("blueprint-motion", self.page("index.html"))
+        self.assertNotIn('id="extraction"', self.page("index.html"))
         feature = json.loads((REPO / "content/articles/hand-drip-taste-adjustment.json").read_text(encoding="utf-8"))
         slug = feature["slug"]
         (self.site / "content/articles" / f"{slug}.json").write_text(
@@ -110,18 +113,56 @@ class BuildTest(unittest.TestCase):
         self.assertIn('紙フィルターがいらない、多孔質セラミック', page)
         self.assertNotIn('autoplay', page)
 
-    def test_motion_is_optional_same_origin_and_home_only(self):
+    def test_entry_asset_fingerprints_follow_bytes_not_paths(self):
         self.add_article()
+        fixture = REPO / "content/articles/hand-drip-taste-adjustment.json"
+        (self.site / "content/articles" / fixture.name).write_bytes(fixture.read_bytes())
+        css = "css/style.css"
+        motion = "js/blueprint-motion.js"
+
+        def fingerprint(path):
+            return hashlib.sha256((self.site / path).read_bytes()).hexdigest()[:16]
+
+        self.build()
+        previous_css, previous_motion = fingerprint(css), fingerprint(motion)
+        self.assertIn(f'href="{css}?v={previous_css}"', self.page("index.html"))
+        self.assertIn(f'src="{motion}?v={previous_motion}"', self.page("index.html"))
+        self.assertIn(f'href="../../{css}?v={previous_css}"', self.page(f"column/{SLUG}/index.html"))
+        self.assertRegex(self.page("404.html"), rf'href="/[^"]*{re.escape(css)}\?v={previous_css}"')
+
+        for path, old in ((css, previous_css), (motion, previous_motion)):
+            with (self.site / path).open("ab") as f:
+                f.write(b"\n/* test independently revised asset */\n")
+            self.assertNotEqual(old, fingerprint(path))
+        self.build()
+        updated = self.page("index.html")
+        self.assertIn(f'href="{css}?v={fingerprint(css)}"', updated)
+        self.assertIn(f'src="{motion}?v={fingerprint(motion)}"', updated)
+        self.assertNotIn(f'?v={previous_css}', updated)
+        self.assertNotIn(f'?v={previous_motion}', updated)
+        self.build()
+        self.assertEqual(updated, self.page("index.html"))
+
+    def test_motion_is_optional_same_origin_and_home_only(self):
+        fixture = REPO / "content/articles/hand-drip-taste-adjustment.json"
+        (self.site / "content/articles" / fixture.name).write_bytes(fixture.read_bytes())
         self.build()
         home = self.page("index.html")
-        self.assertIn('type="module" src="js/blueprint-motion.js"', home)
+        self.assertIn('class="home-editorial"', home)
+        self.assertIn('src="images/editorial/home-drip-overhead.webp"', home)
+        self.assertIn('home-drip-overhead-780.webp 780w', home)
+        self.assertNotIn("blueprint-render", home.split('<section class="ed-section ed-toc"')[0])
+        self.assertLess(home.index('id="blueprint-workbench"'), home.index('id="extraction"'))
+        self.assertIn('id="extraction-title">抽出を図で見る', home)
+        self.assertRegex(home, r'type="module" src="js/blueprint-motion\.js\?v=[a-f0-9]{16}"')
         self.assertIn('src="images/editorial/drip-blueprint.svg"', home)
-        self.assertNotIn("blueprint-motion", self.page(f"column/{SLUG}/index.html"))
+        self.assertNotIn("blueprint-motion", self.page(f"column/{fixture.stem}/index.html"))
         self.assertNotIn("blueprint-motion", self.page("about.html"))
         js = self.page("js/blueprint-motion.js")
         self.assertIn('canvas.getContext("webgl2"', js)
         self.assertLess(js.index('if (!context) return'), js.index('import(vendor('))
         self.assertIn('prefers-reduced-motion: reduce', js)
+        self.assertIn('observer.observe(panel)', js)
         self.assertIn('scrollScene?.destroy(true)', js)
         self.assertIn('new ScrollMagic.Scene', js)
         self.assertIn('TweenMax.to', js)
