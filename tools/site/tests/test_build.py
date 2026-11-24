@@ -90,6 +90,25 @@ class BuildTest(unittest.TestCase):
         self.assertIn("動画を文章で読む", featured)
         self.assertNotIn("<video", self.page(f"column/{SLUG}/index.html"))
 
+    def test_blueprint_actions_target_matching_sections_without_displacing_legacy_links(self):
+        self.build()
+        self.assertIn('href="#articles"', self.page("index.html"))
+        self.assertNotIn('id="blueprint-workbench"', self.page("index.html"))
+        feature = json.loads((REPO / "content/articles/hand-drip-taste-adjustment.json").read_text(encoding="utf-8"))
+        slug = feature["slug"]
+        (self.site / "content/articles" / f"{slug}.json").write_text(
+            json.dumps(feature, ensure_ascii=False), encoding="utf-8")
+        self.build()
+        index = self.page("index.html")
+        page = self.page(f"column/{slug}/index.html")
+        for i, anchor in enumerate(("brew-pour", "brew-grind", "brew-filter"), 1):
+            self.assertIn(f'href="column/{slug}/#{anchor}"', index)
+            self.assertIn(f'<section id="{anchor}" aria-labelledby="sec{i}"><h2 id="sec{i}">', page)
+        self.assertIn(f'href="column/{slug}/#brew-studio-title"', index)
+        self.assertIn('id="brew-studio-title"', page)
+        self.assertIn('紙フィルターがいらない、多孔質セラミック', page)
+        self.assertNotIn('autoplay', page)
+
     def test_about_hides_contact_and_preserves_disclosure(self):
         self.set_site(contact="unpublished-contact-for-test")
         self.build()

@@ -245,9 +245,15 @@ def render_article(site, item, by_slug):
     feature_html = render_brew_media("../../") if slug == BREW_FEATURE else ""
     if feature_html:
         toc = '<li><a href="#brew-studio-title">図と動画で見る</a></li>' + toc
-    sections = "\n".join(
-        f'<h2 id="sec{i}">{e(plain(s["heading"]))}</h2>\n' + "\n".join(render_block(b) for b in s.get("blocks", []))
-        for i, s in enumerate(a["sections"], 1))
+    def article_section(i, section):
+        heading = plain(section["heading"])
+        anchor = BREW_TOPIC_ANCHORS.get(heading) if slug == BREW_FEATURE else None
+        content = "\n".join(render_block(b) for b in section.get("blocks", []))
+        # Keep #secN on the heading for older direct links.
+        markup = f'<h2 id="sec{i}">{e(heading)}</h2>\n{content}'
+        return f'<section id="{anchor}" aria-labelledby="sec{i}">{markup}</section>' if anchor else markup
+
+    sections = "\n".join(article_section(i, section) for i, section in enumerate(a["sections"], 1))
     related = [by_slug[r] for r in item.get("related", []) if r in by_slug and r != slug]
     related_html = ""
     if related:
@@ -338,49 +344,93 @@ def render_category(site, cat, items):
                   rel="../../", path=path, body=body, extra_head=ld(crumb_ld) + "\n")
 
 
+# The blueprint links use meaningful anchors while retaining the legacy numbered
+# anchors (inbound links and the current article TOC use both).
+BREW_TOPIC_ANCHORS = {
+    "注ぐ速さと抽出時間は別": "brew-pour",
+    "粉の細かさで変わる味": "brew-grind",
+    "フィルターで変わる口当たり": "brew-filter",
+}
+BLUEPRINT_TOOLS = (
+    ("01", "POUR", "注ぐ", "注ぎ終わりと、落ち切る時間を分けて見る。",
+     "M12 47C36 37 64 40 81 56C98 72 77 94 63 82C48 68 65 51 101 47M101 31v45m0 7v4m0 8v4"),
+    ("02", "GRIND", "挽く", "粉の細かさを一段変えて、味と流れを比べる。",
+     "M21 30h60l-7 23H28zm9 23h42v35H30zm43-22 23-13h13m-67 79-3 4m13-5 2 3m8-4 3 6m19-5 3 2"),
+    ("03", "FILTER", "こす", "紙・布・金属、紙を使わないセラミックを知る。",
+     "M18 32c0-9 80-9 80 0S18 41 18 32zm0 0 31 49h18l31-49M31 43l23 38m30-38L61 81m-4-40v40m0 6v12"),
+)
+
+
+def render_blueprint_tools(feature):
+    items = []
+    if feature:
+        anchors = set(BREW_TOPIC_ANCHORS[h["heading"]] for h in feature["article"]["sections"]
+                      if h["heading"] in BREW_TOPIC_ANCHORS)
+        for no, en, label, desc, drawing in BLUEPRINT_TOOLS:
+            anchor = f"brew-{en.lower()}"
+            if anchor not in anchors:
+                continue
+            url = f"column/{BREW_FEATURE}/#{anchor}"
+            items.append(f"""<li><a href="{url}">
+              <span class="tool-meter">{no} / {en}</span>
+              <svg viewBox="0 0 120 112" width="120" height="112" aria-hidden="true" focusable="false"><path d="{drawing}"/></svg>
+              <span class="tool-label">{label}<span aria-hidden="true">↗</span></span><span class="tool-desc">{desc}</span>
+            </a></li>""")
+    return "".join(items)
+
+
 def render_index(site, items):
     ld_site = {"@context": "https://schema.org", "@type": "WebSite", "name": site["site_name"], "url": site["base_url"]}
     feature = next((it for it in items if it["slug"] == BREW_FEATURE), None)
-    cta = f"column/{BREW_FEATURE}/#brew-studio-title" if feature else "#articles"
-    cta_label = "図と動画で見る" if feature else "記事一覧へ"
+    cta = "#blueprint-workbench" if feature else "#articles"
+    cta_label = "淹れ方を選ぶ" if feature else "記事一覧へ"
+    tools = render_blueprint_tools(feature)
     spotlight = ""
     if feature:
         spotlight = f"""
-<section class="editorial-feature" aria-labelledby="feature-title">
-  <div class="feature-visual">
-    <img src="{EDITORIAL}brew-adjustments.webp" alt="手挽きミルと挽き目の違う粉、紙・布・金属のフィルターの生成イラスト" width="1200" height="800" loading="lazy" decoding="async">
+<section class="blueprint-workbench" id="blueprint-workbench" aria-labelledby="feature-title">
+  <div class="workbench-heading">
+    <p class="blueprint-label">01 / COFFEE WORKBENCH</p>
+    <h2 id="feature-title">一杯を、<br>ひとつずつ分解する。</h2>
+    <p>同じ豆でも、注ぎ方、粉の細かさ、こし方で変わります。次に淹れるとき、気になるところだけ試してみてください。</p>
   </div>
-  <div class="feature-copy">
-    <p class="kicker">01 / 家で試す</p>
-    <h2 id="feature-title">同じ豆でも、<br>味は変わる。</h2>
-    <p>注ぐ速さ、挽き目、フィルター。どれから変えるといい？ 次の一杯で違いを確かめるコツを、図と短い動画で。</p>
-    <a class="text-link" href="column/{BREW_FEATURE}/">ハンドドリップの味を調整する <span aria-hidden="true">↗</span></a>
+  <ol class="blueprint-tools">{tools}</ol>
+  <div class="blueprint-film-link">
+    <img src="{EDITORIAL}brew-adjustments.webp" alt="手挽きミルと細かさの違う粉、紙・布・金属のフィルターの生成イラスト" width="1200" height="800" loading="lazy" decoding="async">
+    <div>
+      <p class="blueprint-label">BREWING NOTES / 20秒の図解</p>
+      <h3>タイマーは、どこで止める？</h3>
+      <p>注ぎ終わりと、抽出の終わりは別。計り方を短い無音動画と文字で紹介します。</p>
+      <a class="text-link" href="column/{BREW_FEATURE}/#brew-studio-title">図と動画で見る <span aria-hidden="true">↗</span></a>
+    </div>
   </div>
 </section>"""
-    body = f"""<section class="hero">
-  <div class="wrap hero-inner">
-    <div class="hero-copy">
-      <p class="kicker">HOME COFFEE / 暮らしの一杯</p>
-      <h1>家で淹れる、<br>はじめの一杯。</h1>
-      <p>同じ豆でも、淹れ方で味が変わる。<br>まずは、ひとつ変えてみませんか。</p>
-      <a class="btn" href="{cta}">{cta_label} <span aria-hidden="true">↗</span></a>
+    body = f"""<section class="blueprint-hero" aria-labelledby="blueprint-title">
+  <div class="blueprint-shell blueprint-grid">
+    <div class="blueprint-copy">
+      <p class="blueprint-label"><span aria-hidden="true">◎</span> BREWING NOTES / FIG. 01</p>
+      <h1 id="blueprint-title">一滴の<br>設計図<span>。</span></h1>
+      <p class="blueprint-lead">いつもの豆で、もう一杯。<br>注ぎ方・挽き目・フィルターから<br>味の変わり方を見てみよう。</p>
+      <a class="blueprint-button" href="{cta}">{cta_label} <span aria-hidden="true">↓</span></a>
     </div>
-    <figure class="hero-visual">
-      <img src="{EDITORIAL}brew-hero.webp" alt="窓辺の台で、細口ケトルからドリッパーへお湯を注いでいるイラスト" width="1536" height="1024" fetchpriority="high" decoding="async">
-      <figcaption>家でコーヒーを淹れる時間（生成イラスト）</figcaption>
+    <figure class="blueprint-figure">
+      <img class="blueprint-source" src="{EDITORIAL}brew-hero.webp" alt="細口ケトルからドリッパーに湯を注いでいる生成イラスト" width="1536" height="1024" fetchpriority="high" decoding="async">
+      <span class="blueprint-detail" aria-hidden="true"></span>
+      <img class="blueprint-wire" src="{EDITORIAL}drip-blueprint.svg" alt="ドリッパーとカップの断面を表すワイヤーフレーム図" width="780" height="700">
+      <figcaption class="blueprint-label">FIG. 01 / 構造の図解・生成イラスト</figcaption>
     </figure>
   </div>
 </section>
-<div class="wrap journal">
+<div class="blueprint-shell blueprint-paper">
 {spotlight}
-<section class="intro editorial-intro">
-  <p class="kicker">{"02" if feature else "01"} / このサイトについて</p>
-  <h2>難しい道具より、<br>小さな工夫から。</h2>
+<section class="blueprint-intro" aria-labelledby="guide-title">
+  <p class="blueprint-label">{"02" if feature else "01"} / ABOUT THE GUIDE</p>
+  <h2 id="guide-title">家で淹れる一杯のために。</h2>
   <p>家でコーヒーを淹れ始めた人へ。淹れ方、豆と焙煎、器具の基本をまとめるガイドです。</p>
   <p class="small">記事は生成AIで作成し、確認した出典を記事の末尾に載せています。<a href="about.html">記事の作り方</a></p>
 </section>
-{category_nav(site, items)}<section id="articles">
-  <p class="kicker">THE JOURNAL / 読みもの</p>
+{category_nav(site, items)}<section class="blueprint-index" id="articles">
+  <p class="blueprint-label">INDEX / 読みもの</p>
   <h2 id="all-articles">記事一覧</h2>
   {article_list(items)}
 </section>
