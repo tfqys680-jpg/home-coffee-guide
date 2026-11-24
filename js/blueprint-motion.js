@@ -2,6 +2,9 @@
 const panel = document.querySelector(".ed-extraction");
 const figure = panel?.querySelector(".blueprint-figure");
 const mount = figure?.querySelector(".blueprint-render");
+const button = figure?.querySelector(".blueprint-turn");
+const hint = figure?.querySelector(".blueprint-turn-hint");
+const staticWire = figure?.querySelector(".blueprint-wire");
 const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
 const vendor = (file) => new URL(`./vendor/${file}`, import.meta.url);
 const scriptCache = new Map();
@@ -81,10 +84,10 @@ function makeWire(THREE, context, canvas) {
     camera.right = half;
     camera.updateProjectionMatrix();
   }
-  function render(progress) {
-    equipment.rotation.y = -.18 + .33 * progress;
-    equipment.rotation.z = -.03 + .085 * progress;
-    drop.position.y = -.23 - .18 * progress;
+  function render(turn) {
+    equipment.rotation.y = -.18 + turn;
+    equipment.rotation.z = -.03;
+    drop.position.y = -.23;
     renderer.render(scene, camera);
   }
   return {
@@ -102,18 +105,37 @@ let stop;
 let pending;
 let permanentFallback = false;
 let inRange = false;
+let spin3D;
+let fallbackTurn;
+
+function turnIllustration() {
+  if (motion.matches) return;
+  if (spin3D) {
+    spin3D();
+    return;
+  }
+  if (fallbackTurn || !staticWire?.animate) return;
+  // In the static fallback only the artwork rotates, never the focus/hit target.
+  const animation = staticWire.animate([{transform: "rotate(0turn)"}, {transform: "rotate(1turn)"}], {
+    duration: 1100, easing: "cubic-bezier(.41,.06,.31,.98)"
+  });
+  fallbackTurn = animation;
+  const clear = () => { if (fallbackTurn === animation) fallbackTurn = undefined; };
+  animation.finished.then(clear, clear);
+}
 
 async function start() {
   const canvas = document.createElement("canvas");
   canvas.setAttribute("aria-hidden", "true");
   const context = canvas.getContext("webgl2", {alpha: true, antialias: true});
-  if (!context) return;
+  if (!context) { permanentFallback = true; return; }
   // No dependencies are fetched on article pages, without WebGL2, or with reduced motion enabled.
   const [THREE] = await Promise.all([
     import(vendor("three.module.min.js").href),
     loadScript("ScrollMagic.min.js"),
     loadScript("gsap.min.js"),
   ]);
+  if (fallbackTurn) await fallbackTurn.finished.catch(() => {});
   if (motion.matches || permanentFallback) return;
   const {ScrollMagic, TweenMax} = window;
   if (!ScrollMagic?.Controller || !ScrollMagic?.Scene || !TweenMax?.to) return;
@@ -123,11 +145,13 @@ async function start() {
   let controller;
   let scrollScene;
   let tween;
+  let turning = false;
   let frame = 0;
-  const values = {phase: 0};
+  const values = {angle: 0};
   const reset = () => {
     window.removeEventListener("resize", resize);
     window.cancelAnimationFrame(frame);
+    spin3D = undefined;
     tween?.kill();
     scrollScene?.destroy(true);
     controller?.destroy(true);
@@ -136,7 +160,7 @@ async function start() {
     canvas.remove();
   };
   const render = () => {
-    wire.render(values.phase);
+    wire.render(values.angle);
   };
   const resize = () => {
     window.cancelAnimationFrame(frame);
@@ -150,21 +174,32 @@ async function start() {
   try {
     wire = makeWire(THREE, context, canvas);
     wire.resize();
-    // TweenMax is GSAP 3's official backwards-compatible Tween export. Keep it
-    // paused; ScrollMagic is the clock rather than a continuous JS render loop.
-    tween = TweenMax.to(values, {duration: 1, phase: 1, paused: true, ease: "none", onUpdate: render});
+    // Keep scrolling static. The existing ScrollMagic scene only refreshes the
+    // current pose as the illustration enters view; activation clocks one turn.
     controller = new ScrollMagic.Controller({refreshInterval: 0});
-    scrollScene = new ScrollMagic.Scene({triggerElement: panel, triggerHook: .82, duration: () => Math.max(1, panel.offsetHeight + window.innerHeight * .22)})
-      .on("progress", (event) => tween.progress(event.progress))
+    scrollScene = new ScrollMagic.Scene({triggerElement: panel, triggerHook: .9})
+      .on("start", render)
       .addTo(controller);
+    spin3D = () => {
+      if (turning) return;
+      turning = true;
+      values.angle = 0;
+      tween = TweenMax.to(values, {
+        duration: 1.15, angle: Math.PI * 2, ease: "power2.inOut", onUpdate: render,
+        onComplete: () => { turning = false; }
+      });
+    };
     controller.update(true);
     render();
     figure.classList.add("blueprint-enhanced");
+    if (button) button.disabled = false;
+    if (hint) hint.hidden = false;
     window.addEventListener("resize", resize, {passive: true});
     canvas.addEventListener("webglcontextlost", () => {
       permanentFallback = true;
       stop?.();
       stop = undefined;
+      syncMotion();
     }, {once: true});
     stop = reset;
   } catch (err) {
@@ -174,7 +209,11 @@ async function start() {
 }
 
 function syncMotion() {
+  if (button) button.disabled = motion.matches || (!staticWire?.animate && !spin3D);
+  if (hint) hint.hidden = !button || button.disabled;
   if (motion.matches) {
+    fallbackTurn?.cancel();
+    fallbackTurn = undefined;
     stop?.();
     stop = undefined;
   } else if (inRange && !stop && !pending && !permanentFallback) {
@@ -182,7 +221,12 @@ function syncMotion() {
       .finally(() => { pending = undefined; });
   }
 }
-if (mount) {
+if (mount && button) {
+  button.addEventListener("pointerenter", (event) => {
+    if (event.pointerType === "mouse") turnIllustration();
+  });
+  button.addEventListener("click", turnIllustration);
+  syncMotion();
   motion.addEventListener("change", syncMotion);
   if ("IntersectionObserver" in window) {
     const observer = new IntersectionObserver((entries) => {

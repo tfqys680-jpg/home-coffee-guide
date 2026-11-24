@@ -265,6 +265,18 @@ a { text-underline-offset: .25em; }
 .ed-figure-plate { aspect-ratio: 1.8; background: #f5f5f2; position: relative; isolation: isolate; overflow: hidden; }
 .blueprint-figure { margin: 0; min-width: 0; }
 .blueprint-figure figcaption { color: var(--muted); font-size: 11px; margin-top: 6px; }
+.blueprint-turn {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  border: 0; padding: 0; background: transparent; z-index: 2; touch-action: manipulation;
+}
+.blueprint-turn:not(:disabled) { cursor: pointer; }
+.blueprint-turn:focus-visible { outline-offset: -5px; }
+.blueprint-turn-hint { color: var(--muted); margin-inline-start: 1em; white-space: nowrap; }
+.blueprint-turn-hint[hidden], .blueprint-turn-hover { display: none; }
+@media (hover: hover) and (pointer: fine) {
+  .blueprint-turn-hover { display: inline; }
+  .blueprint-turn-tap { display: none; }
+}
 .blueprint-wire, .blueprint-render { position: absolute; inset: 0; width: 100%; height: 100%; }
 .blueprint-wire { object-fit: contain; }
 .blueprint-render { visibility: hidden; pointer-events: none; }

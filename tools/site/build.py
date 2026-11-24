@@ -400,10 +400,11 @@ def render_index(site, items):
 <section class="ed-section ed-extraction" id="extraction" aria-labelledby="extraction-title">
   <figure class="blueprint-figure">
     <div class="ed-figure-plate">
+      <button type="button" class="blueprint-turn" aria-label="抽出の図を回す" disabled></button>
       <span class="blueprint-render" aria-hidden="true"></span>
       <img class="blueprint-wire" src="{EDITORIAL}drip-blueprint.svg" alt="ドリッパーとカップの立体構造を線で表した図" width="780" height="700" loading="lazy" decoding="async">
     </div>
-    <figcaption>ドリッパーとカップの構造（線画）</figcaption>
+    <figcaption>ドリッパーとカップの構造（線画）<span class="blueprint-turn-hint" hidden aria-hidden="true"><span class="blueprint-turn-hover">カーソルを合わせると回転</span><span class="blueprint-turn-tap">タップで回転</span></span></figcaption>
   </figure>
   <div class="ed-section-heading">
     <h2 id="extraction-title">抽出を図で見る</h2>
