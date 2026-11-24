@@ -96,7 +96,7 @@ def layout(site, *, title, description, rel, path, body, page_type="website", ex
 <a class="skip" href="#main">本文へ移動</a>
 <header class="site-header">
   <div class="wrap header-inner">
-    <p class="site-title"><a href="{home(rel)}">{e(site['site_name'])}<span>{e(site['tagline'])}</span></a></p>
+    <p class="site-title"><a href="{home(rel)}"><span class="site-mark" aria-hidden="true"></span><span class="site-wordmark">{e(site['site_name'])}</span></a></p>
     <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="nav">メニュー</button>
     <nav id="nav" class="nav" aria-label="サイト内メニュー">
       <ul>
@@ -172,6 +172,44 @@ def render_operator(site, op, rel):
             f'{notes}{"".join(figs)}</aside>')
 
 
+BREW_FEATURE = "hand-drip-taste-adjustment"
+EDITORIAL = "images/editorial/"
+
+
+def render_brew_media(rel):
+    media = rel + EDITORIAL
+    return f"""
+<section class="brew-studio" aria-labelledby="brew-studio-title">
+  <p class="kicker">BREWING NOTES / 図と動画</p>
+  <h2 id="brew-studio-title">次の一杯で、ひとつだけ。</h2>
+  <p>同じ豆とお湯の量で、調整するのは下のうち一つだけ。味と落ち切り方を比べると、次に何を変えるか決めやすくなります。</p>
+  <figure class="brew-overview">
+    <img src="{media}brew-adjustments.webp" alt="手挽きミル、細かさの異なる三つの粉、紙・布・金属のフィルターを並べたイラスト" width="1200" height="800" loading="lazy" decoding="async">
+    <figcaption>挽き目とフィルターの違いを見比べるための生成イラストです。</figcaption>
+  </figure>
+  <ol class="brew-diagram" aria-label="三つの調整ポイント">
+    <li><span class="diagram-index" aria-hidden="true">01</span><strong>注ぎ方</strong><span>湯を落とす高さと場所は同じにして、まず注ぐ速さだけを比べる。</span></li>
+    <li><span class="diagram-index" aria-hidden="true">02</span><strong>挽き目</strong><span>落ち切るのが遅く渋いなら、次は少し粗く。速くて薄いなら、少し細かく。</span></li>
+    <li><span class="diagram-index" aria-hidden="true">03</span><strong>フィルター</strong><span>器具に合う紙を基準に。素材を比べるときは、挽き目や注ぎ方をそろえる。</span></li>
+  </ol>
+  <figure class="brew-film">
+    <video controls playsinline preload="none" width="1280" height="720" poster="{media}brew-pour-demo-poster.webp" aria-label="ハンドドリップで抽出時間を記録する方法の図解動画">
+      <source src="{media}brew-pour-demo.mp4" type="video/mp4">
+      このブラウザーでは動画を再生できません。下の説明をお読みください。
+    </video>
+    <figcaption>蒸らしから抽出の終わりまでを計る、無音の図解です。動画の経過秒数は抽出の目安ではありません。</figcaption>
+  </figure>
+  <details class="faq"><summary>動画を文章で読む</summary>
+    <ol>
+      <li><strong>蒸らしで計り始める。</strong> 粉に最初のお湯が触れたら、タイマーをスタート。蒸らしも含めます。</li>
+      <li><strong>注ぎ終わりを記録する。</strong> 最後のお湯を注いだ時点をメモし、計測は続けます。</li>
+      <li><strong>ドリッパーを外して終了する。</strong> ドリッパーを外した時点を抽出時間の終点として記録します。</li>
+      <li><strong>挽き目だけを一段変える。</strong> 豆・粉量・湯量・湯温・注ぎ方をそろえ、抽出時間と味の違いを比べます。</li>
+    </ol>
+  </details>
+</section>"""
+
+
 def render_article(site, item, by_slug):
     a, slug, date = item["article"], item["slug"], item["date"]
     path = f"column/{slug}/"
@@ -204,6 +242,9 @@ def render_article(site, item, by_slug):
             for f in a["faq"]]},
     ]
     toc = "".join(f'<li><a href="#sec{i}">{e(plain(s["heading"]))}</a></li>' for i, s in enumerate(a["sections"], 1))
+    feature_html = render_brew_media("../../") if slug == BREW_FEATURE else ""
+    if feature_html:
+        toc = '<li><a href="#brew-studio-title">図と動画で見る</a></li>' + toc
     sections = "\n".join(
         f'<h2 id="sec{i}">{e(plain(s["heading"]))}</h2>\n' + "\n".join(render_block(b) for b in s.get("blocks", []))
         for i, s in enumerate(a["sections"], 1))
@@ -238,6 +279,7 @@ def render_article(site, item, by_slug):
 <p>{inline(a["lead"])}</p>
 <h2 id="can-do">この記事でわかること</h2><ul class="check">{"".join(f"<li>{inline(x)}</li>" for x in a["can_do"])}</ul>
 <nav class="toc" aria-label="目次"><p class="toc-label">目次</p><ol>{toc}</ol></nav>
+{feature_html}
 {sections}
 <h2 id="checklist">チェックリスト</h2><ul class="check">{"".join(f"<li>{inline(x)}</li>" for x in a["checklist"])}</ul>
 <h2 id="faq">よくある質問</h2>
@@ -298,23 +340,48 @@ def render_category(site, cat, items):
 
 def render_index(site, items):
     ld_site = {"@context": "https://schema.org", "@type": "WebSite", "name": site["site_name"], "url": site["base_url"]}
+    feature = next((it for it in items if it["slug"] == BREW_FEATURE), None)
+    cta = f"column/{BREW_FEATURE}/#brew-studio-title" if feature else "#articles"
+    cta_label = "図と動画で見る" if feature else "記事一覧へ"
+    spotlight = ""
+    if feature:
+        spotlight = f"""
+<section class="editorial-feature" aria-labelledby="feature-title">
+  <div class="feature-visual">
+    <img src="{EDITORIAL}brew-adjustments.webp" alt="手挽きミルと挽き目の違う粉、紙・布・金属のフィルターの生成イラスト" width="1200" height="800" loading="lazy" decoding="async">
+  </div>
+  <div class="feature-copy">
+    <p class="kicker">01 / 家で試す</p>
+    <h2 id="feature-title">同じ豆でも、<br>味は変わる。</h2>
+    <p>注ぐ速さ、挽き目、フィルター。どれから変えるといい？ 次の一杯で違いを確かめるコツを、図と短い動画で。</p>
+    <a class="text-link" href="column/{BREW_FEATURE}/">ハンドドリップの味を調整する <span aria-hidden="true">↗</span></a>
+  </div>
+</section>"""
     body = f"""<section class="hero">
-  <div class="wrap">
-    <h1>{e(site['site_name'])}</h1>
-    <p>{e(site['description'])}</p>
-    <p><a class="btn" href="#articles">記事を読む</a></p>
+  <div class="wrap hero-inner">
+    <div class="hero-copy">
+      <p class="kicker">HOME COFFEE / 暮らしの一杯</p>
+      <h1>家で淹れる、<br>はじめの一杯。</h1>
+      <p>同じ豆でも、淹れ方で味が変わる。<br>まずは、ひとつ変えてみませんか。</p>
+      <a class="btn" href="{cta}">{cta_label} <span aria-hidden="true">↗</span></a>
+    </div>
+    <figure class="hero-visual">
+      <img src="{EDITORIAL}brew-hero.webp" alt="窓辺の台で、細口ケトルからドリッパーへお湯を注いでいるイラスト" width="1536" height="1024" fetchpriority="high" decoding="async">
+      <figcaption>家でコーヒーを淹れる時間（生成イラスト）</figcaption>
+    </figure>
   </div>
 </section>
-<div class="wrap">
-<section class="intro">
-  <h2>このサイトについて</h2>
-  <p>ハンドドリップを始めたばかりの人や、家のコーヒーをもう少しおいしくしたい人に向けて、淹れ方・豆・器具の基本をまとめています。</p>
-  <p>記事は生成AIで作成しています。数値や制度に関わる記述は、公的機関や業界団体などの出典ページを確認し、出典を記事末にまとめています。</p>
+<div class="wrap journal">
+{spotlight}
+<section class="intro editorial-intro">
+  <p class="kicker">{"02" if feature else "01"} / このサイトについて</p>
+  <h2>難しい道具より、<br>小さな工夫から。</h2>
+  <p>家でコーヒーを淹れ始めた人へ。淹れ方、豆と焙煎、器具の基本をまとめるガイドです。</p>
+  <p class="small">記事は生成AIで作成し、確認した出典を記事の末尾に載せています。<a href="about.html">記事の作り方</a></p>
 </section>
 {category_nav(site, items)}<section id="articles">
-  <h2>新着記事</h2>
-  {article_list(items[:3])}
-  <h2 id="all-articles">すべての記事</h2>
+  <p class="kicker">THE JOURNAL / 読みもの</p>
+  <h2 id="all-articles">記事一覧</h2>
   {article_list(items)}
 </section>
 </div>"""
@@ -348,9 +415,7 @@ def build():
         *([h2("運営者について")] + [p(x) for x in site.get("operator_profile", [])] if site.get("operator_profile") else []),
         h2("記事の作り方"),
         p("記事は生成AI（ChatGPT）で作成します。自動公開の記事は別の生成AI（Claude）が出典を照合して推敲し、個別に出典を確認して編集した記事は、その方法を記事内に記載します。"),
-        p("運営者や専門家による実際の試飲・器具のテスト・個別の確認は行っていません。記事内の体験談のような表現は使わない方針です。"),
-        p("誤りに気づいた場合は、下記の連絡先からお知らせください。確認のうえ修正します。"),
-        h2("連絡先"), p(site["contact"])])
+        p("運営者や専門家による実際の試飲・器具のテスト・個別の確認は行っていません。記事内の体験談のような表現は使わない方針です。")])
     out["privacy.html"] = static_page(site, "プライバシーポリシー", "privacy.html", [
         h2("アクセス解析"), p("当サイトでは、利用状況を把握するためにアクセス解析ツールを使う場合があります。収集されるデータは匿名で、個人を特定するものではありません。"),
         h2("広告"), p("当サイトは、第三者のアフィリエイトプログラムを利用する場合があります。広告配信事業者は、Cookieを使って閲覧者の興味に応じた広告を表示することがあります。"),
