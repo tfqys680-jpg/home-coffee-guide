@@ -4,6 +4,7 @@
 サイトを一時ディレクトリへ複製して build.py と check.py を実行する。リポジトリ本体は変更しない。
 実行: python3 tools/site/tests/test_build.py
 """
+import hashlib
 import importlib.util
 import json
 import os
@@ -89,6 +90,53 @@ class BuildTest(unittest.TestCase):
         self.assertNotIn("autoplay", featured)
         self.assertIn("動画を文章で読む", featured)
         self.assertNotIn("<video", self.page(f"column/{SLUG}/index.html"))
+
+    def test_blueprint_actions_target_matching_sections_without_displacing_legacy_links(self):
+        self.build()
+        self.assertIn('href="#articles"', self.page("index.html"))
+        self.assertNotIn('id="blueprint-workbench"', self.page("index.html"))
+        feature = json.loads((REPO / "content/articles/hand-drip-taste-adjustment.json").read_text(encoding="utf-8"))
+        slug = feature["slug"]
+        (self.site / "content/articles" / f"{slug}.json").write_text(
+            json.dumps(feature, ensure_ascii=False), encoding="utf-8")
+        self.build()
+        index = self.page("index.html")
+        page = self.page(f"column/{slug}/index.html")
+        for i, anchor in enumerate(("brew-pour", "brew-grind", "brew-filter"), 1):
+            self.assertIn(f'href="column/{slug}/#{anchor}"', index)
+            self.assertIn(f'<section id="{anchor}" aria-labelledby="sec{i}"><h2 id="sec{i}">', page)
+        self.assertIn(f'href="column/{slug}/#brew-studio-title"', index)
+        self.assertIn('id="brew-studio-title"', page)
+        self.assertIn('紙フィルターがいらない、多孔質セラミック', page)
+        self.assertNotIn('autoplay', page)
+
+    def test_motion_is_optional_same_origin_and_home_only(self):
+        self.add_article()
+        self.build()
+        home = self.page("index.html")
+        self.assertIn('type="module" src="js/blueprint-motion.js"', home)
+        self.assertIn('src="images/editorial/drip-blueprint.svg"', home)
+        self.assertNotIn("blueprint-motion", self.page(f"column/{SLUG}/index.html"))
+        self.assertNotIn("blueprint-motion", self.page("about.html"))
+        js = self.page("js/blueprint-motion.js")
+        self.assertIn('canvas.getContext("webgl2"', js)
+        self.assertLess(js.index('if (!context) return'), js.index('import(vendor('))
+        self.assertIn('prefers-reduced-motion: reduce', js)
+        self.assertIn('scrollScene?.destroy(true)', js)
+        self.assertIn('new ScrollMagic.Scene', js)
+        self.assertIn('TweenMax.to', js)
+        self.assertIn('tween.progress(event.progress)', js)
+        self.assertIn('new THREE.WebGLRenderer', js)
+        vendor = self.site / "js/vendor"
+        files = {
+            "ScrollMagic.min.js": "22eb8669c71f095da883c5e69d2d3448e8a42a4d5e98dd049bef63ae0defeb12",
+            "gsap.min.js": "3d1bea374ab1b703cc5c4105358eec63c4465efdc573931dc116e34a0a190c1b",
+            "three.core.js": "60880f0fd017e6ad08a80c2f0f7015c336ba0a5b6dbdde733b9272ca89eb95e2",
+            "three.module.min.js": "49bfc58c4097915b4fcf08ed1ee245c0da687f02d35908f38266dbd3d5324ac2",
+        }
+        for name, digest in files.items():
+            self.assertEqual(hashlib.sha256((vendor / name).read_bytes()).hexdigest(), digest)
+        self.assertIn('from"./three.core.js"', self.page("js/vendor/three.module.min.js"))
 
     def test_about_hides_contact_and_preserves_disclosure(self):
         self.set_site(contact="unpublished-contact-for-test")
