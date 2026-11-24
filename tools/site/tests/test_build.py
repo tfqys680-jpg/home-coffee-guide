@@ -71,6 +71,34 @@ class BuildTest(unittest.TestCase):
                            capture_output=True, text=True)
         self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
 
+    def test_editorial_feature_remains_optional(self):
+        self.build()
+        self.assertNotIn("brew-studio-title", self.page("index.html"))
+        self.add_article(review_mode="manual")
+        d = self.site / "content/articles"
+        source = d / f"{SLUG}.json"
+        item = json.loads(source.read_text(encoding="utf-8"))
+        feature_slug = "hand-drip-taste-adjustment"
+        item["slug"] = feature_slug
+        (d / f"{feature_slug}.json").write_text(json.dumps(item), encoding="utf-8")
+        self.build()
+        self.assertIn(f"column/{feature_slug}/#brew-studio-title", self.page("index.html"))
+        featured = self.page(f"column/{feature_slug}/index.html")
+        self.assertIn('src="../../images/editorial/brew-pour-demo.mp4"', featured)
+        self.assertIn('<video controls playsinline preload="none"', featured)
+        self.assertNotIn("autoplay", featured)
+        self.assertIn("動画を文章で読む", featured)
+        self.assertNotIn("<video", self.page(f"column/{SLUG}/index.html"))
+
+    def test_about_hides_contact_and_preserves_disclosure(self):
+        self.set_site(contact="unpublished-contact-for-test")
+        self.build()
+        about = self.page("about.html")
+        for phrase in ("unpublished-contact-for-test", "誤りに気づいた場合は", "連絡先"):
+            self.assertNotIn(phrase, about)
+        self.assertIn("生成AI（ChatGPT）", about)
+        self.assertIn("プライバシーポリシー", about)
+
     def check(self):
         return subprocess.run([sys.executable, str(self.site / "tools/site/check.py")], env=self.env,
                               capture_output=True, text=True)
