@@ -186,6 +186,25 @@ class BuildTest(unittest.TestCase):
             self.assertEqual(hashlib.sha256((vendor / name).read_bytes()).hexdigest(), digest)
         self.assertIn('from"./three.core.js"', self.page("js/vendor/three.module.min.js"))
 
+    def test_french_press_reachable_with_diagram_and_sources(self):
+        for slug in ("french-press-how-to", "hand-drip-taste-adjustment"):
+            fixture = REPO / "content" / "articles" / f"{slug}.json"
+            (self.site / "content" / "articles" / fixture.name).write_bytes(fixture.read_bytes())
+        self.build()
+        slug = "french-press-how-to"
+        new = self.page(f"column/{slug}/index.html")
+        self.assertIn(f'href="column/{slug}/"', self.page("index.html"))
+        self.assertIn(f'href="../../column/{slug}/"', self.page("category/brew/index.html"))
+        self.assertIn(f"/column/{slug}/</loc>", self.page("sitemap.xml"))
+        self.assertIn(f'href="../{slug}/"', self.page("column/hand-drip-taste-adjustment/index.html"))
+        self.assertIn('href="../hand-drip-taste-adjustment/"', new)
+        self.assertRegex(new, r'french-press-steps\.svg\?v=[a-f0-9]{16}" alt="[^"]+"')
+        self.assertIn(".press-steps img { aspect-ratio: 720 / 230;", self.page("css/style.css"))
+        self.assertIn("粉を湯に浸す → 網を上げて待つ → 最後にゆっくり押す。", new)
+        self.assertIn("ゆっくり押し下げます", new)
+        self.assertIn("https://www.ucc.co.jp/enjoy/brew/howto-drip_04.html", new)
+        self.assertIn("https://espro.com/pages/product-care", new)
+
     def test_about_hides_contact_and_preserves_disclosure(self):
         self.set_site(contact="unpublished-contact-for-test")
         self.build()
