@@ -296,3 +296,22 @@ body:has(.blueprint-hero) .site-mark { color: var(--blueprint-lime); }
   .blueprint-film-link { grid-template-columns: 1fr; }
   .blueprint-film-link img { aspect-ratio: 16/9; }
 }
+
+/* If the decorative WebGL canvas is unavailable, retain the labeled static art. */
+.blueprint-render {
+  position: absolute; visibility: hidden; top: 0; left: -4%; z-index: 1;
+  width: 101%; height: 100%; pointer-events: none;
+  background: radial-gradient(ellipse at 50% 50%, #bfffaa1d, transparent 65%);
+}
+.blueprint-render canvas { display: block; width: 100%; height: 100%; }
+.blueprint-figure figcaption { z-index: 2; }
+.blueprint-enhanced .blueprint-render { visibility: visible; }
+.blueprint-enhanced .blueprint-wire { opacity: 0; }
+.blueprint-enhanced .blueprint-source { transform: translateY(var(--photo-shift, 0px)) rotate(-5deg); }
+.blueprint-enhanced .blueprint-detail { transform: translateY(calc(var(--photo-shift, 0px) * -.65)) rotate(8deg); }
+@media (prefers-reduced-motion: reduce) {
+  .blueprint-enhanced .blueprint-render { display: none; }
+  .blueprint-enhanced .blueprint-wire { opacity: 1; }
+  .blueprint-enhanced .blueprint-source { transform: rotate(-5deg); }
+  .blueprint-enhanced .blueprint-detail { transform: rotate(8deg); }
+}

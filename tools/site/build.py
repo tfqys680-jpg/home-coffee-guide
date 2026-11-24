@@ -59,7 +59,7 @@ def ld(obj):
     return '<script type="application/ld+json">\n' + json.dumps(obj, ensure_ascii=False, indent=2) + "\n</script>"
 
 
-def layout(site, *, title, description, rel, path, body, page_type="website", extra_head="", noindex=False, image=None):
+def layout(site, *, title, description, rel, path, body, page_type="website", extra_head="", noindex=False, image=None, extra_scripts=""):
     """rel: ルートへの相対パス（'' か '../../'）。path: サイト内パス（'' や 'column/x/'）。"""
     url = site["base_url"] + path
     img = image or {"url": site["base_url"] + OGP["path"], "width": OGP["width"], "height": OGP["height"]}
@@ -121,7 +121,7 @@ def layout(site, *, title, description, rel, path, body, page_type="website", ex
     <p class="small">&copy; <span class="js-year">2026</span> {e(site['site_name'])}</p>
   </div>
 </footer>
-<script src="{rel}js/main.js"></script>
+<script src="{rel}js/main.js"></script>{extra_scripts}
 </body>
 </html>
 """
@@ -416,6 +416,7 @@ def render_index(site, items):
     <figure class="blueprint-figure">
       <img class="blueprint-source" src="{EDITORIAL}brew-hero.webp" alt="細口ケトルからドリッパーに湯を注いでいる生成イラスト" width="1536" height="1024" fetchpriority="high" decoding="async">
       <span class="blueprint-detail" aria-hidden="true"></span>
+      <span class="blueprint-render" aria-hidden="true"></span>
       <img class="blueprint-wire" src="{EDITORIAL}drip-blueprint.svg" alt="ドリッパーとカップの断面を表すワイヤーフレーム図" width="780" height="700">
       <figcaption class="blueprint-label">FIG. 01 / 構造の図解・生成イラスト</figcaption>
     </figure>
@@ -436,7 +437,8 @@ def render_index(site, items):
 </section>
 </div>"""
     return layout(site, title=site["site_name"], description=site["description"], rel="", path="", body=body,
-                  extra_head=ld(ld_site) + "\n")
+                  extra_head=ld(ld_site) + "\n",
+                  extra_scripts='\n<script type="module" src="js/blueprint-motion.js"></script>')
 
 
 def static_page(site, title, path, paragraphs):
