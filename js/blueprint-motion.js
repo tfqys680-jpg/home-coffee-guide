@@ -49,8 +49,8 @@ function makeWire(THREE, context, canvas) {
   const scene = new THREE.Scene();
   const equipment = new THREE.Group();
   scene.add(equipment);
-  const line = new THREE.LineBasicMaterial({color: 0x654935});
-  const light = new THREE.LineBasicMaterial({color: 0x654935, transparent: true, opacity: 0.52});
+  const line = new THREE.LineBasicMaterial({color: 0x263e8c});
+  const light = new THREE.LineBasicMaterial({color: 0x263e8c, transparent: true, opacity: 0.52});
   const geometries = [];
   const mesh = (rings, count, width, material) => {
     const geometry = modelGeometry(THREE, rings, count, width);
