@@ -370,7 +370,6 @@ def render_index(site, items):
     ld_site = {"@context": "https://schema.org", "@type": "WebSite", "name": site["site_name"], "url": site["base_url"]}
     feature = next((it for it in items if it["slug"] == BREW_FEATURE), None)
     spotlight = ""
-    cta = "#articles"
     if feature:
         article_url = f"column/{BREW_FEATURE}/"
         anchors = {BREW_TOPIC_ANCHORS[h["heading"]] for h in feature["article"]["sections"]
@@ -383,12 +382,11 @@ def render_index(site, items):
     </a></li>""" for no, slug, label, desc in EDITORIAL_TOPICS if f"brew-{slug}" in anchors)
         topic_index = ""
         if topics:
-            cta = "#blueprint-workbench"
             topic_index = f"""
 <section class="ed-section ed-toc" id="blueprint-workbench" aria-labelledby="feature-title">
   <div class="ed-section-heading">
-    <p class="ed-kicker">01 / BREW GUIDE</p>
-    <h2 id="feature-title">今日の一杯で試す</h2>
+    <p class="ed-kicker">03 ／ 手順</p>
+    <h2 id="feature-title">注ぐ・挽く・こす</h2>
     <p>気になるところから、ひとつだけ。</p>
   </div>
   <ol class="ed-topics">{topics}</ol>
@@ -398,38 +396,63 @@ def render_index(site, items):
   <figure class="blueprint-figure">
     <div class="ed-figure-plate">
       <img class="blueprint-source" src="{EDITORIAL}brew-adjustments.webp" alt="粉の粗さやフィルターを比べた生成画像" width="1200" height="800" loading="lazy" decoding="async">
+      <img class="field-study-detail" src="{EDITORIAL}brew-hero.webp" alt="お湯を注ぐ手元の生成画像" width="1536" height="1024" loading="lazy" decoding="async">
       <span class="blueprint-render" aria-hidden="true"></span>
-      <img class="blueprint-wire" src="{EDITORIAL}drip-blueprint.svg" alt="ドリッパーとカップの立体構造を線で表した図" width="780" height="700" loading="lazy" decoding="async">
+      <img class="blueprint-wire" src="{asset_url(f'{EDITORIAL}drip-blueprint.svg')}" alt="ドリッパーとカップの立体構造を線で表した図" width="780" height="700" loading="lazy" decoding="async">
     </div>
-    <figcaption>図 01 — ドリッパーとカップの構造・生成画像</figcaption>
+    <figcaption>図 01　器具の構造 ／ 挽き目と注ぎ方のイメージ（生成画像）</figcaption>
   </figure>
   <div class="ed-section-heading">
-    <p class="ed-kicker">02 / EXTRACTION NOTES</p>
+    <p class="ed-kicker">04 ／ 観察</p>
     <h2 id="extraction-title">抽出を図で見る</h2>
     <p>お湯を注ぎ終えても、抽出はまだ続きます。タイマーをどこで止めるか、図と短い無音動画で確認できます。</p>
     <a class="ed-inline-link" href="{article_url}#brew-studio-title">図と動画で見る <span aria-hidden="true">↗</span></a>
   </div>
 </section>"""
-    cta_label = "淹れ方を読む" if cta != "#articles" else "記事一覧へ"
-    body = f"""<div class="ed-wrap">
-<section class="ed-hero" aria-labelledby="editorial-title">
-  <p class="ed-kicker">THE HOME COFFEE GUIDE</p>
-  <div class="ed-hero-copy">
-    <h1 id="editorial-title"><span>一杯から、</span><wbr><span>淹れ方を知る。</span></h1>
-    <div class="ed-hero-aside">
-      <p>お湯の注ぎ方、豆の挽き目、フィルター。<br class="ed-desktop-break"> 小さな工夫で、いつもの一杯が変わります。</p>
-      <a class="ed-inline-link" href="{cta}">{cta_label} <span aria-hidden="true">↓</span></a>
-    </div>
+    sheet = f"""<section class="field-sheet" aria-labelledby="editorial-title">
+  <header class="field-title">
+    <div><p class="field-number">家の珈琲 <span>｜ 第01帖</span></p><h1 id="editorial-title">淹れ方帖</h1></div>
+    <nav aria-label="このページの目次"><a href="#baseline">基準の一杯</a><a href="#taste">味と落ち方</a><a href="#extraction">抽出の図解</a></nav>
+  </header>
+  <div class="field-grid">
+    <section class="field-baseline" id="baseline" aria-labelledby="baseline-title">
+      <div class="field-register"><span>01 ／ 計量</span><span>紙フィルター</span></div>
+      <h2 id="baseline-title">基準の一杯</h2>
+      <p class="field-source">カルディのペーパードリップ作例</p>
+      <div class="field-data"><dl class="field-metrics">
+        <div><dt>粉・中挽き</dt><dd>10<small>g</small></dd></div>
+        <div><dt>注ぐ湯</dt><dd>150〜160<small>mL</small></dd></div>
+        <div><dt>湯温</dt><dd>約<span>90</span><small>℃</small></dd></div>
+        <div><dt>蒸らし</dt><dd>約<span>20</span><small>秒</small></dd></div>
+        <div><dt>できあがり</dt><dd>約<span>140</span><small>mL</small></dd></div>
+      </dl>
+      <figure class="field-plate">
+        <img src="{EDITORIAL}brew-field-plate.svg" alt="紙フィルターと粉を通り、湯がカップへ落ちる断面図" width="440" height="302">
+        <figcaption>紙フィルターの断面</figcaption>
+      </figure></div>
+      <a class="field-link" href="{article_url}#sec5">計り方と作例の出典へ <span aria-hidden="true">↗</span></a>
+    </section>
+    <section class="field-taste" id="taste" aria-labelledby="taste-title">
+      <div class="field-register"><span>02 ／ 調整</span><span>一度に一つ</span></div>
+      <h2 id="taste-title">味と落ち方を見くらべる</h2>
+      <p>次の一杯で試す条件を選んでください。</p>
+      <details><summary>薄くて酸味が目立つ ／ 落ちるのが早い</summary><p>挽き目をわずかに細かくして、味と落ち方を比べる。</p></details>
+      <details><summary>苦み・渋みが残る ／ 落ちるのが遅い</summary><p>挽き目を少し粗くして比べる。苦みが好みなら変える必要はありません。</p></details>
+      <details><summary>味は気になる ／ 落ち方はいつも通り</summary><p>まずは同じ手順を再現し、フィルターのずれや注ぐ位置を確認する。</p></details>
+      <a class="field-link" href="{article_url}#sec6">判断の理由を読む <span aria-hidden="true">↗</span></a>
+    </section>
   </div>
-  <figure class="ed-hero-photo">
-    <img src="{EDITORIAL}home-drip-overhead.webp" srcset="{EDITORIAL}home-drip-overhead-780.webp 780w, {EDITORIAL}home-drip-overhead.webp 1440w" sizes="(max-width: 1266px) 90vw, 1140px" alt="真上から見た、コーヒー粉の入ったドリッパーとカップ" width="1440" height="960" fetchpriority="high" decoding="async">
-    <figcaption><span>ハンドドリップのイメージ</span><span>生成画像</span></figcaption>
-  </figure>
 </section>
+""" if feature else """<section class="field-sheet field-empty">
+  <header class="field-title"><div><p class="field-number">家の珈琲</p><h1>淹れ方帖</h1></div></header>
+  <p><a href="#articles">記事一覧へ</a></p>
+</section>"""
+    body = f"""<div class="ed-wrap">
+{sheet}
 {spotlight}
 <section class="ed-section ed-articles" id="articles" aria-labelledby="all-articles">
   <div class="ed-section-heading">
-    <p class="ed-kicker">READING ROOM</p>
+    <p class="ed-kicker">記事索引</p>
     <h2 id="all-articles">記事一覧</h2>
   </div>
   <div>{article_list(items)}</div>
@@ -437,7 +460,7 @@ def render_index(site, items):
 {category_nav(site, items)}
 <section class="ed-section ed-about" aria-labelledby="guide-title">
   <div class="ed-section-heading">
-    <p class="ed-kicker">ABOUT THE GUIDE</p>
+    <p class="ed-kicker">編集について</p>
     <h2 id="guide-title">このガイドについて</h2>
   </div>
   <div>
