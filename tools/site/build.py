@@ -360,9 +360,9 @@ BREW_TOPIC_ANCHORS = {
     "フィルターで変わる口当たり": "brew-filter",
 }
 EDITORIAL_TOPICS = (
-    ("01", "pour", "お湯の注ぎ方", "注ぎ終わりと、落ち切る時間を分けて見る。"),
-    ("02", "grind", "豆の挽き方", "粉の細かさを一段変えて、味と流れを比べる。"),
-    ("03", "filter", "フィルターの選び方", "紙・布・金属、紙を使わないセラミックの違いを知る。"),
+    ("pour", "お湯の注ぎ方", "注ぎ終わりと、落ち切る時間を分けて見る。"),
+    ("grind", "豆の挽き方", "粉の細かさを一段変えて、味と流れを比べる。"),
+    ("filter", "フィルターの選び方", "紙・布・金属、紙を使わないセラミックの違いを知る。"),
 )
 
 
@@ -370,26 +370,21 @@ def render_index(site, items):
     ld_site = {"@context": "https://schema.org", "@type": "WebSite", "name": site["site_name"], "url": site["base_url"]}
     feature = next((it for it in items if it["slug"] == BREW_FEATURE), None)
     spotlight = ""
-    cta = "#articles"
     if feature:
         article_url = f"column/{BREW_FEATURE}/"
         anchors = {BREW_TOPIC_ANCHORS[h["heading"]] for h in feature["article"]["sections"]
                    if h["heading"] in BREW_TOPIC_ANCHORS}
         topics = "".join(
             f"""<li><a href="{article_url}#brew-{slug}">
-      <span class="ed-no" aria-hidden="true">{no}</span>
       <span class="ed-topic">{label}</span><span class="ed-desc">{desc}</span>
-      <span class="ed-arrow" aria-hidden="true">↗</span>
-    </a></li>""" for no, slug, label, desc in EDITORIAL_TOPICS if f"brew-{slug}" in anchors)
+      <span class="ed-arrow" aria-hidden="true">→</span>
+    </a></li>""" for slug, label, desc in EDITORIAL_TOPICS if f"brew-{slug}" in anchors)
         topic_index = ""
         if topics:
-            cta = "#blueprint-workbench"
             topic_index = f"""
 <section class="ed-section ed-toc" id="blueprint-workbench" aria-labelledby="feature-title">
   <div class="ed-section-heading">
-    <p class="ed-kicker">01 / BREW GUIDE</p>
-    <h2 id="feature-title">今日の一杯で試す</h2>
-    <p>気になるところから、ひとつだけ。</p>
+    <h2 id="feature-title">淹れ方を読む</h2>
   </div>
   <ol class="ed-topics">{topics}</ol>
 </section>"""
@@ -397,39 +392,32 @@ def render_index(site, items):
 <section class="ed-section ed-extraction" id="extraction" aria-labelledby="extraction-title">
   <figure class="blueprint-figure">
     <div class="ed-figure-plate">
-      <img class="blueprint-source" src="{EDITORIAL}brew-adjustments.webp" alt="粉の粗さやフィルターを比べた生成画像" width="1200" height="800" loading="lazy" decoding="async">
       <span class="blueprint-render" aria-hidden="true"></span>
       <img class="blueprint-wire" src="{EDITORIAL}drip-blueprint.svg" alt="ドリッパーとカップの立体構造を線で表した図" width="780" height="700" loading="lazy" decoding="async">
     </div>
-    <figcaption>図 01 — ドリッパーとカップの構造・生成画像</figcaption>
+    <figcaption>ドリッパーとカップの構造（線画）</figcaption>
   </figure>
   <div class="ed-section-heading">
-    <p class="ed-kicker">02 / EXTRACTION NOTES</p>
     <h2 id="extraction-title">抽出を図で見る</h2>
     <p>お湯を注ぎ終えても、抽出はまだ続きます。タイマーをどこで止めるか、図と短い無音動画で確認できます。</p>
     <a class="ed-inline-link" href="{article_url}#brew-studio-title">図と動画で見る <span aria-hidden="true">↗</span></a>
   </div>
 </section>"""
-    cta_label = "淹れ方を読む" if cta != "#articles" else "記事一覧へ"
     body = f"""<div class="ed-wrap">
 <section class="ed-hero" aria-labelledby="editorial-title">
-  <p class="ed-kicker">THE HOME COFFEE GUIDE</p>
-  <div class="ed-hero-copy">
-    <h1 id="editorial-title"><span>一杯から、</span><wbr><span>淹れ方を知る。</span></h1>
-    <div class="ed-hero-aside">
-      <p>お湯の注ぎ方、豆の挽き目、フィルター。<br class="ed-desktop-break"> 小さな工夫で、いつもの一杯が変わります。</p>
-      <a class="ed-inline-link" href="{cta}">{cta_label} <span aria-hidden="true">↓</span></a>
-    </div>
-  </div>
-  <figure class="ed-hero-photo">
-    <img src="{EDITORIAL}home-drip-overhead.webp" srcset="{EDITORIAL}home-drip-overhead-780.webp 780w, {EDITORIAL}home-drip-overhead.webp 1440w" sizes="(max-width: 1266px) 90vw, 1140px" alt="真上から見た、コーヒー粉の入ったドリッパーとカップ" width="1440" height="960" fetchpriority="high" decoding="async">
-    <figcaption><span>ハンドドリップのイメージ</span><span>生成画像</span></figcaption>
-  </figure>
+  <h1 id="editorial-title"><span>家で淹れる</span><span>コーヒー</span></h1>
+  <svg class="ed-drawing" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 510 280" width="510" height="280" aria-hidden="true" focusable="false">
+    <g stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <path stroke-width="2" d="M114 118c10 72 55 113 134 113 76 0 123-41 135-113m-270 1c0-26 65-45 136-45 70 0 134 19 134 45s-64 45-134 45-136-19-136-45Zm270 2c28-14 53-6 53 16 0 22-26 44-67 46m-271 33c-41 7-63 18-63 30 0 19 88 35 211 35 128 0 218-16 218-36 0-10-23-20-61-27"/>
+      <path stroke-width=".9" d="M138 135c23-17 66-28 112-28 49 0 86 12 112 30m25-5c23-9 35-4 35 7 0 12-15 25-46 32M172 248c30 4 53 4 75 4 30 0 61-2 90-7"/>
+      <path stroke-width="1.3" d="M285 24c-13 13-29 30-33 44-4 13 8 18 14 9 4-6 3-14-1-21m-22 32c-1 7-3 14-9 21"/>
+    </g>
+  </svg>
+  <p>お湯の注ぎ方、豆の挽き目、フィルター。<br>家で一杯を淹れるときの手引きです。</p>
 </section>
 {spotlight}
 <section class="ed-section ed-articles" id="articles" aria-labelledby="all-articles">
   <div class="ed-section-heading">
-    <p class="ed-kicker">READING ROOM</p>
     <h2 id="all-articles">記事一覧</h2>
   </div>
   <div>{article_list(items)}</div>
@@ -437,7 +425,6 @@ def render_index(site, items):
 {category_nav(site, items)}
 <section class="ed-section ed-about" aria-labelledby="guide-title">
   <div class="ed-section-heading">
-    <p class="ed-kicker">ABOUT THE GUIDE</p>
     <h2 id="guide-title">このガイドについて</h2>
   </div>
   <div>
