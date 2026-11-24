@@ -65,6 +65,9 @@ class PipelineTest(unittest.TestCase):
         shutil.copytree(REPO, self.site, ignore=shutil.ignore_patterns(".git", "__pycache__"))
         for p in (self.site / "content/articles").glob("*.json"):
             p.unlink()
+        # 公開記事を除いたテスト環境では、生成物も空の状態にそろえる。
+        subprocess.run([sys.executable, str(self.site / "tools/site/build.py")],
+                       env=dict(os.environ, SITE_ROOT=str(self.site)), check=True, capture_output=True, text=True)
         (self.site / "docs/auto-queue.csv").write_text(
             "slug,テーマ,主キーワード,補助キーワード,想定読者,YMYL区分,状態,備考\n"
             + "".join(f"{s},試験テーマ{i},{kw},{sub},試験読者,低,待機,試験\n" for i, (s, kw, sub) in enumerate(QUEUE, 1)),

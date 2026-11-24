@@ -117,7 +117,7 @@ def layout(site, *, title, description, rel, path, body, page_type="website", ex
       <li><a href="{rel}privacy.html">プライバシーポリシー</a></li>
       <li><a href="{rel}disclaimer.html">免責事項・広告・AI利用について</a></li>
     </ul>
-    <p class="small">本サイトの記事は生成AIで作成し、出典との照合を自動で行って公開しています。本サイトはアフィリエイト広告を利用することがあります。</p>
+    <p class="small">本サイトの記事は生成AIで作成し、確認した出典を記事ごとに掲載しています。本サイトはアフィリエイト広告を利用することがあります。</p>
     <p class="small">&copy; <span class="js-year">2026</span> {e(site['site_name'])}</p>
   </div>
 </footer>
@@ -223,12 +223,17 @@ def render_article(site, item, by_slug):
         operator_html = "\n" + render_operator(site, op, "../../")
     else:
         human, byline_extra, operator_html = "人による実際の試飲や器具のテストは行っていません。", "", ""
+    review_note = ("この記事は生成AI（ChatGPT）で作成し、出典ページの本文を確認して編集しました。"
+                   if item.get("review_mode") == "manual"
+                   else "この記事は生成AI（ChatGPT）で下書きし、別の生成AI（Claude）が出典ページの本文と照合・推敲して公開しました。")
+    source_check = ("出典ページの本文を確認" if item.get("review_mode") == "manual"
+                    else "出典ページを自動で取得し、本文と照合")
     body = f"""<div class="wrap article-wrap">
 <nav class="breadcrumb" aria-label="パンくずリスト"><ol>{"".join(f'<li><a href="{h}">{e(n)}</a></li>' if h else f'<li>{e(n)}</li>' for n, _, h in crumbs)}</ol></nav>
 <article class="article">
 <p class="meta">公開日：{jp_date(date)}　最終更新日：{jp_date(modified)}　作成：{e(site["author"])}（生成AI）{byline_extra}</p>
 <h1>{e(a["title"])}</h1>
-<div class="ai-note">この記事は生成AI（ChatGPT）で下書きし、別の生成AI（Claude）が出典ページの本文と照合・推敲して公開しました。{e(notice)}{human}</div>{operator_html}
+<div class="ai-note">{e(review_note)}{e(notice)}{human}</div>{operator_html}
 <div class="summary"><p class="summary-label">結論</p><p>{inline(a["conclusion"])}</p></div>
 <p>{inline(a["lead"])}</p>
 <h2 id="can-do">この記事でわかること</h2><ul class="check">{"".join(f"<li>{inline(x)}</li>" for x in a["can_do"])}</ul>
@@ -243,7 +248,7 @@ def render_article(site, item, by_slug):
 <ol class="sources">
 {srcs}
 </ol>
-<p class="small">確認日：{jp_date(date)}（出典ページを自動で取得し、本文と照合）。情報は変わることがあるため、最新の内容は各出典で確認してください。</p>
+<p class="small">確認日：{jp_date(date)}（{e(source_check)}）。情報は変わることがあるため、最新の内容は各出典で確認してください。</p>
 {related_html}
 </article>
 </div>"""
@@ -304,7 +309,7 @@ def render_index(site, items):
 <section class="intro">
   <h2>このサイトについて</h2>
   <p>ハンドドリップを始めたばかりの人や、家のコーヒーをもう少しおいしくしたい人に向けて、淹れ方・豆・器具の基本をまとめています。</p>
-  <p>記事は生成AIで作成しています。数値や制度に関わる記述は、公的機関や業界団体などの出典ページと自動で照合し、出典を記事末にまとめています。</p>
+  <p>記事は生成AIで作成しています。数値や制度に関わる記述は、公的機関や業界団体などの出典ページを確認し、出典を記事末にまとめています。</p>
 </section>
 {category_nav(site, items)}<section id="articles">
   <h2>新着記事</h2>
@@ -342,7 +347,7 @@ def build():
         # 運営者本人が書く紹介文（site.json の operator_profile）。空なら見出しごと出さない
         *([h2("運営者について")] + [p(x) for x in site.get("operator_profile", [])] if site.get("operator_profile") else []),
         h2("記事の作り方"),
-        p("記事は、生成AI（ChatGPT）が下書きを作り、別の生成AI（Claude）が出典ページの本文と照合して推敲したうえで、自動で公開しています。"),
+        p("記事は生成AI（ChatGPT）で作成します。自動公開の記事は別の生成AI（Claude）が出典を照合して推敲し、個別に出典を確認して編集した記事は、その方法を記事内に記載します。"),
         p("運営者や専門家による実際の試飲・器具のテスト・個別の確認は行っていません。記事内の体験談のような表現は使わない方針です。"),
         p("誤りに気づいた場合は、下記の連絡先からお知らせください。確認のうえ修正します。"),
         h2("連絡先"), p(site["contact"])])
@@ -351,7 +356,7 @@ def build():
         h2("広告"), p("当サイトは、第三者のアフィリエイトプログラムを利用する場合があります。広告配信事業者は、Cookieを使って閲覧者の興味に応じた広告を表示することがあります。"),
         h2("改定"), p("本ポリシーは、必要に応じて内容を見直し、このページで公開します。")])
     out["disclaimer.html"] = static_page(site, "免責事項・広告・AI利用について", "disclaimer.html", [
-        h2("AIによる記事作成"), p("当サイトの記事は生成AIで作成し、出典との照合を自動で行って公開しています。内容の正確性には注意していますが、誤りが含まれる可能性があります。"),
+        h2("AIによる記事作成"), p("当サイトの記事は生成AIで作成し、確認した出典を記事ごとに掲載しています。内容の正確性には注意していますが、誤りが含まれる可能性があります。"),
         h2("健康に関する情報"), p("カフェインなど健康に関わる記述は一般的な情報です。体質・持病・妊娠中などの事情がある方は、医師や薬剤師に相談してください。"),
         h2("広告について"), p("当サイトはアフィリエイト広告を利用することがあります。紹介する商品の価格や仕様は変わることがあるため、購入前に販売ページで確認してください。"),
         h2("免責"), p("当サイトの情報を利用したことで生じた損害について、当サイトは責任を負いかねます。")])
