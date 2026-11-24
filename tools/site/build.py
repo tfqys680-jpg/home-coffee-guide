@@ -147,6 +147,12 @@ def render_block(b):
         lines = "".join(f"<p>{inline(x)}</p>" for x in b.get("lines", []))
         return f'<div class="example"><p class="example-label">{e(b.get("label", "例"))}</p>{lines}</div>'
     if t == "table":
+        if b.get("presentation") == "brew-measures":
+            pairs = "".join(
+                f"<div><dt>{e(k)}</dt><dd>" + "".join(f"<span>{e(plain(line))}</span>" for line in v.split("／")) + "</dd></div>"
+                for k, v in b["rows"]
+            )
+            return f'<dl class="brew-measures">{pairs}</dl>'
         head = "".join(f"<th scope=\"col\">{e(h)}</th>" for h in b.get("headers", []))
         body = "".join("<tr>" + "".join(f"<td>{inline(c)}</td>" for c in row) + "</tr>" for row in b.get("rows", []))
         return f'<div class="table-wrap"><table><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table></div>'
@@ -181,6 +187,7 @@ def render_operator(site, op, rel):
 
 
 BREW_FEATURE = "hand-drip-taste-adjustment"
+BREW_BASICS = "まずはこの一杯｜ペーパードリップの基本"
 PRESS_GUIDE = "french-press-how-to"
 EDITORIAL = "images/editorial/"
 
@@ -250,14 +257,21 @@ def render_article(site, item, by_slug):
             {"@type": "Question", "name": plain(f["q"]), "acceptedAnswer": {"@type": "Answer", "text": plain(f["a"])}}
             for f in a["faq"]]},
     ]
-    toc = "".join(f'<li><a href="#sec{i}">{e(plain(s["heading"]))}</a></li>' for i, s in enumerate(a["sections"], 1))
+    numbered = list(enumerate(a["sections"], 1))
+    basics = next(((n, sec) for n, sec in numbered if sec["heading"] == BREW_BASICS), None) if slug == BREW_FEATURE else None
+    remaining = [(n, sec) for n, sec in numbered if not basics or n != basics[0]]
+    title_link = lambda n, sec: f'<li><a href="#sec{n}">{e(plain(sec["heading"]))}</a></li>'
     feature_html = render_brew_media("../../") if slug == BREW_FEATURE else ""
+    toc = title_link(*basics) if basics else ""
     if feature_html:
-        toc = '<li><a href="#brew-studio-title">図と動画で見る</a></li>' + toc
-    def article_section(i, section):
+        toc += '<li><a href="#brew-studio-title">図と動画で見る</a></li>'
+    toc += "".join(title_link(n, sec) for n, sec in remaining)
+    def article_section(i, section, disclosure=""):
         heading = plain(section["heading"])
         anchor = BREW_TOPIC_ANCHORS.get(heading) if slug == BREW_FEATURE else None
-        content = "\n".join(render_block(b) for b in section.get("blocks", []))
+        blocks = section.get("blocks", [])
+        content = "\n".join(render_block(b) + (disclosure if disclosure and j == 3 else "")
+                            for j, b in enumerate(blocks))
         if slug == PRESS_GUIDE and heading == "粉を入れ、待ってからゆっくり押す":
             image = asset_url(f"{EDITORIAL}french-press-steps.svg", "../../")
             content = (f'<figure class="brew-overview press-steps"><img src="{image}" '
@@ -269,7 +283,7 @@ def render_article(site, item, by_slug):
         markup = f'<h2 id="sec{i}">{e(heading)}</h2>\n{content}'
         return f'<section id="{anchor}" aria-labelledby="sec{i}">{markup}</section>' if anchor else markup
 
-    sections = "\n".join(article_section(i, section) for i, section in enumerate(a["sections"], 1))
+    sections = "\n".join(article_section(i, section) for i, section in remaining)
     related = [by_slug[r] for r in item.get("related", []) if r in by_slug and r != slug]
     related_html = ""
     if related:
@@ -291,12 +305,18 @@ def render_article(site, item, by_slug):
                    else "この記事は生成AI（ChatGPT）で下書きし、別の生成AI（Claude）が出典ページの本文と照合・推敲して公開しました。")
     source_check = ("出典ページの本文を確認" if item.get("review_mode") == "manual"
                     else "出典ページを自動で取得し、本文と照合")
+    metadata = f'<p class="meta">公開日：{jp_date(date)}　最終更新日：{jp_date(modified)}　作成：{e(site["author"])}（生成AI）{byline_extra}</p>'
+    disclosure = f'<div class="ai-note">{e(review_note)}{e(notice)}{human}</div>{operator_html}'
+    basics_html = ""
+    if basics:
+        n, sec = basics
+        basics_html = f'<section class="brew-basics" aria-labelledby="sec{n}">{article_section(n, sec, metadata + disclosure)}</section>'
     body = f"""<div class="wrap article-wrap">
 <nav class="breadcrumb" aria-label="パンくずリスト"><ol>{"".join(f'<li><a href="{h}">{e(n)}</a></li>' if h else f'<li>{e(n)}</li>' for n, _, h in crumbs)}</ol></nav>
-<article class="article">
-<p class="meta">公開日：{jp_date(date)}　最終更新日：{jp_date(modified)}　作成：{e(site["author"])}（生成AI）{byline_extra}</p>
+<article class="article{" article--brew-basics" if basics else ""}">
+{"" if basics else metadata}
 <h1>{e(a["title"])}</h1>
-<div class="ai-note">{e(review_note)}{e(notice)}{human}</div>{operator_html}
+{basics_html or disclosure}
 <div class="summary"><p class="summary-label">結論</p><p>{inline(a["conclusion"])}</p></div>
 <p>{inline(a["lead"])}</p>
 <h2 id="can-do">この記事でわかること</h2><ul class="check">{"".join(f"<li>{inline(x)}</li>" for x in a["can_do"])}</ul>
