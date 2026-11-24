@@ -94,7 +94,7 @@ class BuildTest(unittest.TestCase):
 
     def test_blueprint_actions_target_matching_sections_without_displacing_legacy_links(self):
         self.build()
-        self.assertIn('href="#articles"', self.page("index.html"))
+        self.assertIn('href="./#articles"', self.page("index.html"))
         self.assertNotIn('id="blueprint-workbench"', self.page("index.html"))
         self.assertNotIn("blueprint-motion", self.page("index.html"))
         self.assertNotIn('id="extraction"', self.page("index.html"))
@@ -149,9 +149,16 @@ class BuildTest(unittest.TestCase):
         self.build()
         home = self.page("index.html")
         self.assertIn('class="home-editorial"', home)
-        self.assertIn('src="images/editorial/home-drip-overhead.webp"', home)
-        self.assertIn('home-drip-overhead-780.webp 780w', home)
-        self.assertNotIn("blueprint-render", home.split('<section class="ed-section ed-toc"')[0])
+        cover = home.split('<section class="ed-hero"', 1)[1].split("</section>", 1)[0]
+        self.assertIn('<svg class="ed-drawing"', cover)
+        self.assertIn('<span>家で淹れる</span><span>コーヒー</span>', cover)
+        self.assertNotIn("blueprint-render", cover)
+        self.assertNotIn("<img", cover)
+        self.assertNotIn("<a ", cover)
+        self.assertNotIn('src="images/editorial/brew-adjustments.webp"', home)
+        self.assertIn('src="../../images/editorial/brew-adjustments.webp"', self.page(f"column/{fixture.stem}/index.html"))
+        css = self.page("css/style.css")
+        self.assertEqual(re.findall(r"--milk:\s*([^;]+);", css), ["#fff"])
         self.assertLess(home.index('id="blueprint-workbench"'), home.index('id="extraction"'))
         self.assertIn('id="extraction-title">抽出を図で見る', home)
         self.assertRegex(home, r'type="module" src="js/blueprint-motion\.js\?v=[a-f0-9]{16}"')

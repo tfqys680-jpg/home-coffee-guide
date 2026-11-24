@@ -49,8 +49,8 @@ function makeWire(THREE, context, canvas) {
   const scene = new THREE.Scene();
   const equipment = new THREE.Group();
   scene.add(equipment);
-  const line = new THREE.LineBasicMaterial({color: 0x654935});
-  const light = new THREE.LineBasicMaterial({color: 0x654935, transparent: true, opacity: 0.52});
+  const line = new THREE.LineBasicMaterial({color: 0x403b32});
+  const light = new THREE.LineBasicMaterial({color: 0x403b32, transparent: true, opacity: 0.52});
   const geometries = [];
   const mesh = (rings, count, width, material) => {
     const geometry = modelGeometry(THREE, rings, count, width);
@@ -124,7 +124,7 @@ async function start() {
   let scrollScene;
   let tween;
   let frame = 0;
-  const values = {phase: 0, depth: 0};
+  const values = {phase: 0};
   const reset = () => {
     window.removeEventListener("resize", resize);
     window.cancelAnimationFrame(frame);
@@ -133,11 +133,9 @@ async function start() {
     controller?.destroy(true);
     wire?.dispose();
     figure.classList.remove("blueprint-enhanced");
-    figure.style.removeProperty("--photo-shift");
     canvas.remove();
   };
   const render = () => {
-    figure.style.setProperty("--photo-shift", `${values.depth.toFixed(2)}px`);
     wire.render(values.phase);
   };
   const resize = () => {
@@ -154,7 +152,7 @@ async function start() {
     wire.resize();
     // TweenMax is GSAP 3's official backwards-compatible Tween export. Keep it
     // paused; ScrollMagic is the clock rather than a continuous JS render loop.
-    tween = TweenMax.to(values, {duration: 1, phase: 1, depth: 14, paused: true, ease: "none", onUpdate: render});
+    tween = TweenMax.to(values, {duration: 1, phase: 1, paused: true, ease: "none", onUpdate: render});
     controller = new ScrollMagic.Controller({refreshInterval: 0});
     scrollScene = new ScrollMagic.Scene({triggerElement: panel, triggerHook: .82, duration: () => Math.max(1, panel.offsetHeight + window.innerHeight * .22)})
       .on("progress", (event) => tween.progress(event.progress))
