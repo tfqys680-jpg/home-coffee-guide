@@ -1,0 +1,21 @@
+{
+  "pass": false,
+  "candidate_sha256": "60d46ec27102d384ea0305300b22341f899e6ec7e4a7b60895ba3e6d75bcd9fb",
+  "verdict": "REVISE",
+  "errors": [
+    "審査上限内にPASSとならなかった"
+  ],
+  "rounds": 2,
+  "sources": [
+    {
+      "url": "https://www.aboutcoffee.org/beans/storage-and-shelf-life/",
+      "verified": true,
+      "text_chars": 7538
+    },
+    {
+      "url": "https://www.caa.go.jp/policies/policy/food_labeling/food_sanitation/expiration_date/",
+      "verified": true,
+      "text_chars": 2902
+    }
+  ]
+}
