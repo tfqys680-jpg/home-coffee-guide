@@ -302,6 +302,23 @@ def quality_check(article, task, existing):
                                     [a["article"] for a in existing], categories())
 
 
+def review_quality_feedback(article, task, existing):
+    """同じ品質ゲートの診断を通常審査にも渡す。判定や原稿を変更しない。"""
+    result = quality_check(article, task, existing)
+    lines = [f"- {e}" for e in result["errors"]]
+    normalized = article_quality.deep(article, article_quality.clean)
+    units = [(f"body_units[{i}]", u) for i, u in enumerate(article_quality.body_units(normalized))]
+    units += [(f"{key}[{i}]", u) for key in ("can_do", "checklist")
+              for i, u in enumerate(normalized.get(key, []))]
+    for path, unit in units:
+        for sentence in re.split(r"(?<=[。！？!?])", str(unit)):
+            if (article_quality.NUMBER_WITH_UNIT.search(article_quality.strip_cites(sentence))
+                    and not article_quality.CITE.search(sentence)):
+                lines.append(f"- 数値の出典位置候補 {path}: {sentence.strip()} / "
+                             "出典本文を確認し、配置ミス・根拠不足・提案の混在を区別する")
+    return "\n".join(lines) or "機械診断で不合格なし（根拠の照合は別途必要）"
+
+
 def append_run_log(date, lines):
     p = ROOT / "docs/run-log.md"
     text = p.read_text(encoding="utf-8").rstrip("\n") if p.exists() else "# 自動記事パイプライン 実行ログ"
@@ -352,7 +369,8 @@ def run():
     for _ in range(cfg["max_review_rounds"]):
         apply_review(ask_claude(prompts.REVIEWER_SYSTEM, prompts.REVIEWER_USER.format(
             theme=task["テーマ"], main_kw=task["主キーワード"], existing=existing_desc,
-            article=json.dumps(article, ensure_ascii=False, indent=1), sources=source_report())))
+            article=json.dumps(article, ensure_ascii=False, indent=1), sources=source_report(),
+            quality_errors=review_quality_feedback(article, task, existing))))
         if verdict != "REVISE":
             break
 

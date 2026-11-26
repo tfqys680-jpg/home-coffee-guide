@@ -1,0 +1,110 @@
+[
+  {
+    "id": 1,
+    "path": "article.conclusion",
+    "original_sentence": "米国コーヒー協会（NCA）の目安では、密閉容器に移した焙煎豆が鮮度を保つのは常温で1〜3週間、粉は1〜2週間、冷凍した豆は3〜4か月ほどです。",
+    "classification": "配置ミス",
+    "evidence_source": "[1] NCA",
+    "evidence_location": "How long does coffee last? の状態別の表",
+    "action": "常温の豆・粉、冷凍の豆の数値と密閉の前提を維持し、同じ文の句点前に番号を置く。"
+  },
+  {
+    "id": 2,
+    "path": "article.sections[0].blocks[3].text",
+    "original_sentence": "これとは別に、NCAは焙煎したコーヒーを1〜2週間で使い切れる量ずつ、こまめに買うよう提案しています。",
+    "classification": "配置ミス",
+    "evidence_source": "[1] NCA",
+    "evidence_location": "Ideal coffee bean storage conditions の購入量の項目",
+    "action": "1〜2週間は買う量の目安として明記。保存期間と取り違えない。"
+  },
+  {
+    "id": 3,
+    "path": "article.sections[2].blocks[0].text",
+    "original_sentence": "中身を取り出すときは、1週間以内に使う分だけを手早く取り、コーヒーに結露が生じる前に残りを冷凍庫へ戻します。",
+    "classification": "配置ミス",
+    "evidence_source": "[1] NCA",
+    "evidence_location": "Freezing coffee beans の取り出し方",
+    "action": "一度に取り出す量の上限と、結露前に残りを戻す条件を保持。"
+  },
+  {
+    "id": 4,
+    "path": "article.sections[2].blocks[1].text",
+    "original_sentence": "NCAの「一度に取り出すのは1週間分まで」という目安に合わせて、冷凍する前に密閉できる冷凍用の袋や容器へ小分けしておく方法があります。",
+    "classification": "事実と提案の混在",
+    "evidence_source": "[1] NCA",
+    "evidence_location": "Freezing coffee beans の取り出し方",
+    "action": "取り出す量の上限は根拠あり。冷凍前の小分けはNCAの直接の指示ではない。上限の説明と当サイトの提案を別の段落に分ける。"
+  },
+  {
+    "id": 5,
+    "path": "article.sections[2].blocks[1].text",
+    "original_sentence": "こうすると、1回に出すのは1袋だけで済み、残りは冷凍庫に置いたままにできます。",
+    "classification": "根拠不足",
+    "evidence_source": "[1] NCA",
+    "evidence_location": "小袋の個数・取り出す回数の指定は確認できない",
+    "action": "「1回に1袋」は資料由来の数値ではない。任意の袋の大きさにも左右されるため、出典を足さず削除。必要な袋だけ取り出す工夫として説明。"
+  },
+  {
+    "id": 6,
+    "path": "article.sections[2].blocks[4].text",
+    "original_sentence": "NCAの冷凍の目安は3〜4か月なので、日付があれば、どの袋から使うかをその場で決められます。",
+    "classification": "配置ミス",
+    "evidence_source": "[1] NCA",
+    "evidence_location": "How long does coffee last? の冷凍した焙煎豆の行",
+    "action": "3〜4か月は根拠あり。日付で順序を管理する提案は別の文とし、風味・安全の保証にしない。"
+  },
+  {
+    "id": 7,
+    "path": "article.sections[4].blocks[0].text",
+    "original_sentence": "NCAの目安では、密閉容器に移した粉の鮮度は常温で1〜2週間です。",
+    "classification": "配置ミス",
+    "evidence_source": "[1] NCA",
+    "evidence_location": "How long does coffee last? の常温の粉の行",
+    "action": "1〜2週間と密閉の前提を保持して同じ文に出典を置く。"
+  },
+  {
+    "id": 8,
+    "path": "article.sections[4].blocks[0].text",
+    "original_sentence": "豆の1〜3週間より短くなっています。",
+    "classification": "配置ミス",
+    "evidence_source": "[1] NCA",
+    "evidence_location": "How long does coffee last? の常温の焙煎豆の行",
+    "action": "比較対象の1〜3週間にも同じ文に出典を置く。"
+  },
+  {
+    "id": 9,
+    "path": "article.sections[5].blocks[0].text",
+    "original_sentence": "豆なら常温で1〜3週間、粉なら1〜2週間というNCAの目安に収まりそうなら、全量を普段用の密閉容器に移してかまいません。",
+    "classification": "事実と提案の混在",
+    "evidence_source": "[1] NCA",
+    "evidence_location": "How long does coffee last? の常温の豆・粉の行",
+    "action": "鮮度の数値と密閉の前提は根拠あり。「全量を移してかまわない」という個別判断は資料の直接の指示ではないため分離。"
+  },
+  {
+    "id": 10,
+    "path": "article.sections[5].blocks[0].text",
+    "original_sentence": "収まりそうにないなら、その日のうちに予備を1週間分ずつ密閉して冷凍し、どの袋から使うかを決めておきます。",
+    "classification": "根拠不足",
+    "evidence_source": "[1] NCA",
+    "evidence_location": "その日のうちに冷凍、冷凍前に1週間分ずつ、という指定は確認できない",
+    "action": "取り出す量の上限を冷凍前の小分け量へ転用しない。当日冷凍という時機も削除し、冷凍と購入量の見直しを比較する提案へ。"
+  },
+  {
+    "id": 11,
+    "path": "article.faq[0].a",
+    "original_sentence": "NCAの目安では、密閉容器に移した焙煎豆が鮮度を保つのは、常温で1〜3週間、冷蔵で2週間、冷凍で3〜4か月です。",
+    "classification": "配置ミス",
+    "evidence_source": "[1] NCA",
+    "evidence_location": "How long does coffee last? の常温・冷蔵・冷凍の焙煎豆の行",
+    "action": "FAQでも各数値を含む同じ文に出典を置き、風味の目安と安全の期限を区別。"
+  },
+  {
+    "id": 12,
+    "path": "article.faq[2].a",
+    "original_sentence": "開封した粉の常温での目安は1〜2週間とされています。",
+    "classification": "配置ミス",
+    "evidence_source": "[1] NCA",
+    "evidence_location": "How long does coffee last? の常温の粉の行",
+    "action": "FAQの1〜2週間に同じ文で出典を付け、袋を小さくする提案は分離。"
+  }
+]

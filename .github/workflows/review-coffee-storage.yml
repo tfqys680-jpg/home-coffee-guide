@@ -1,0 +1,25 @@
+name: review-coffee-storage
+on:
+  pull_request:
+    types: [opened]
+permissions:
+  contents: read
+jobs:
+  review:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'codex/coffee-storage-quality-20261126'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Review candidate with actual source text
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_MODEL: ${{ vars.ANTHROPIC_MODEL }}
+          REVIEW_OUTPUT: ${{ runner.temp }}/coffee-review
+        run: python3 tools/auto-publish/review_storage_candidate.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coffee-storage-review
+          path: ${{ runner.temp }}/coffee-review
+          retention-days: 14
