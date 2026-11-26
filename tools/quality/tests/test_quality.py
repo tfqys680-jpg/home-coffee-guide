@@ -251,7 +251,8 @@ class StorageCitationRegression(unittest.TestCase):
         cls.fixed = json.loads((d / "article.json").read_text())
 
     def evaluate(self, article):
-        existing = [json.loads(p.read_text())["article"] for p in (REPO / "content/articles").glob("*.json")]
+        existing = [item["article"] for p in (REPO / "content/articles").glob("*.json")
+                    if (item := json.loads(p.read_text()))["slug"] != "coffee-bean-storage"]
         return q.evaluate(article, "コーヒー豆 保存方法", "コーヒー豆 冷凍;粉 保存 期間", existing,
                           CATS, {"min_chars": 2500, "h2": (5, 8), "faq": (3, 5)})
 

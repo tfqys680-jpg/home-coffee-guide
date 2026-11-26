@@ -20,6 +20,8 @@ def main():
     task = {"主キーワード": "コーヒー豆 保存方法", "補助キーワード": "コーヒー豆 冷凍;粉 保存 期間"}
     existing = p.existing_articles()
     history = []
+    prior_path = p.ROOT / "docs/quality/coffee-storage-20261126/previous-findings.json"
+    prior_findings = json.loads(prior_path.read_text()) if prior_path.exists() else []
     fetched = {}
     result = {"pass": False, "candidate_sha256": hashlib.sha256(candidate.read_bytes()).hexdigest()}
     try:
@@ -31,10 +33,13 @@ def main():
                     fetched[url] = p.fetch_source(url)
                 ok, text = fetched[url]
                 source_lines.append(f"### [{i}] {source['title']} {url}\nverified={ok}\n{text}")
-            review = p.ask_claude(p.prompts.REVIEWER_SYSTEM, p.prompts.REVIEWER_USER.format(
+            user = p.prompts.REVIEWER_USER.format(
                 theme="コーヒー豆の保存方法と保存期間の目安", main_kw=task["主キーワード"],
                 existing=p.existing_text(), article=json.dumps(article, ensure_ascii=False),
-                sources="\n\n".join(source_lines), quality_errors=p.review_quality_feedback(article, task, existing)))
+                sources="\n\n".join(source_lines), quality_errors=p.review_quality_feedback(article, task, existing))
+            user += "\n\n## 前回までの指摘（修正済みか本文と照合し、解決済みの表現を再導入しない）\n"
+            user += json.dumps(prior_findings + [x for r in history for x in r.get("issues", [])], ensure_ascii=False)
+            review = p.ask_claude(p.prompts.REVIEWER_SYSTEM, user)
             history.append(review)
             write(out / f"round-{round_no}.json", review)
             article = review.get("article") or article
