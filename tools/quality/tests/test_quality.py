@@ -241,5 +241,67 @@ class Cli(unittest.TestCase):
         self.assertIn("FAIL coffee-grams-per-cup", p.stdout)
 
 
+class StorageCitationRegression(unittest.TestCase):
+    """実際の保留原稿を固定し、既存の判定を変更せず修正版を検査する。"""
+
+    @classmethod
+    def setUpClass(cls):
+        d = REPO / "docs/proposals/coffee-storage-20261126"
+        cls.original = json.loads((d / "original-article.json").read_text())
+        cls.fixed = json.loads((d / "article.json").read_text())
+
+    def evaluate(self, article):
+        existing = [item["article"] for p in (REPO / "content/articles").glob("*.json")
+                    if (item := json.loads(p.read_text()))["slug"] != "coffee-bean-storage"]
+        return q.evaluate(article, "コーヒー豆 保存方法", "コーヒー豆 冷凍;粉 保存 期間", existing,
+                          CATS, {"min_chars": 2500, "h2": (5, 8), "faq": (3, 5)})
+
+    def test_original_reproduces_twelve_uncited_sentences(self):
+        r = self.evaluate(self.original)
+        self.assertEqual(r["metrics"]["uncited_numbers"], 12, r)
+        self.assertFalse(r["pass"])
+
+    def test_corrected_draft_passes_unchanged_gate(self):
+        r = self.evaluate(self.fixed)
+        self.assertTrue(r["pass"], r)
+        self.assertEqual(r["metrics"]["uncited_numbers"], 0)
+
+    def test_period_after_citation_is_required_in_each_sentence(self):
+        for text, count in [("粉は1〜2週間 [1]。", 0), ("粉は1〜2週間。 [1]", 1),
+                            ("粉は1〜2週間。豆は1〜3週間 [1]。", 1)]:
+            with self.subTest(text=text):
+                a = copy.deepcopy(self.fixed)
+                a["lead"] += text
+                self.assertEqual(self.evaluate(a)["metrics"]["uncited_numbers"], count)
+
+    def test_missing_citation_in_each_supported_location_is_held(self):
+        for key in ("conclusion", "lead", "next_step", "faq", "checklist", "can_do", "table", "example"):
+            with self.subTest(key=key):
+                a = copy.deepcopy(self.fixed)
+                text = "保存の目安は99週間です。"
+                if key in ("conclusion", "lead", "next_step"): a[key] += text
+                elif key == "faq": a[key][0]["a"] += text
+                elif key in ("checklist", "can_do"): a[key].append(text)
+                elif key == "table": a["sections"][0]["blocks"][1]["rows"].append(["試験の豆", text, "暗所"])
+                else: a["sections"][0]["blocks"].append({"type": "example", "lines": [text]})
+                r = self.evaluate(a)
+                self.assertFalse(r["pass"], r)
+                self.assertGreater(r["metrics"]["uncited_numbers"], 0)
+
+    def test_nonexistent_source_still_fails(self):
+        a = copy.deepcopy(self.fixed)
+        a["lead"] += "試験の期間は99週間です [99]。"
+        self.assertIn("存在しない出典番号", joined(self.evaluate(a)))
+
+    def test_every_numeric_table_cell_has_its_own_citation(self):
+        for _, b in q.blocks_of(self.fixed):
+            if b.get("type") == "table":
+                for row in b["rows"]:
+                    for cell in row:
+                        for sentence in __import__('re').split(r"(?<=[。！？!?])", cell):
+                            if q.NUMBER_WITH_UNIT.search(q.strip_cites(sentence)):
+                                self.assertRegex(sentence, q.CITE)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

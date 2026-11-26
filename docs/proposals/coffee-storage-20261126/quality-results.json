@@ -1,0 +1,48 @@
+{
+  "original": {
+    "pass": false,
+    "errors": [
+      "出典番号のない数値が12か所: 「米国コーヒー協会(NCA)の目安では、密閉容器に移した焙煎豆が鮮度を保つのは常温」など"
+    ],
+    "warnings": [],
+    "metrics": {
+      "informative_tables": 1,
+      "duplicate_sentences": 0,
+      "filler_per_1000": 0.0,
+      "hedge_per_1000": 0.18,
+      "keyword_max_per_1000": 2.0,
+      "uncited_numbers": 12,
+      "citations": 34,
+      "cited_units": 27,
+      "sources_cited": 2,
+      "unanchored_h2": 0,
+      "same_sentences": 0,
+      "near_sentence_share": 0.0,
+      "number_overlap": 0.0,
+      "max_similarity": 0.063,
+      "chars": 5633
+    }
+  },
+  "corrected": {
+    "pass": true,
+    "errors": [],
+    "warnings": [],
+    "metrics": {
+      "informative_tables": 1,
+      "duplicate_sentences": 0,
+      "filler_per_1000": 0.16,
+      "hedge_per_1000": 0.16,
+      "keyword_max_per_1000": 1.4,
+      "uncited_numbers": 0,
+      "citations": 64,
+      "cited_units": 26,
+      "sources_cited": 2,
+      "unanchored_h2": 0,
+      "same_sentences": 0,
+      "near_sentence_share": 0.0,
+      "number_overlap": 0.0,
+      "max_similarity": 0.068,
+      "chars": 6315
+    }
+  }
+}

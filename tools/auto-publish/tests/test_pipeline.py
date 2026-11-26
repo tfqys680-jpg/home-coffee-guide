@@ -187,12 +187,34 @@ class PipelineTest(unittest.TestCase):
         self.check_site()
 
     # ---- 品質ゲート（D2: 落ちたら指摘を渡して1回推敲し直す）
-    def test_quality_failure_is_fixed_in_one_more_round(self):
+    def test_quality_failure_is_fixed_and_independently_reviewed(self):
         good = sample_article(1)
         bad = broken(good)
-        r = self.run_pipeline(1, bad, [review(bad), review(good)])
+        r = self.run_pipeline(1, bad, [review(bad), review(good, verdict="REVISE"), review(good)])
         self.assertEqual(r["status"], "created", r)
         self.check_site()
+
+    def test_quality_repair_pass_also_requires_an_independent_review(self):
+        good = sample_article(1)
+        # 修復応答が誤ってPASSでも、その応答だけでは公開しない。
+        r = self.run_pipeline(1, broken(good), [review(broken(good)), review(good), review(good, verdict="BLOCK")])
+        self.assertEqual(r["status"], "blocked", r)
+        self.assertIn("Claudeの審査結果が BLOCK", r["reason"])
+
+    def test_quality_repair_stays_held_without_remaining_review_budget(self):
+        good = sample_article(1)
+        bad = broken(good)
+        r = self.run_pipeline(1, bad, [review(bad, verdict="REVISE"), review(bad), review(good, verdict="REVISE")])
+        self.assertEqual(r["status"], "blocked", r)
+        self.assertIn("Claudeの審査結果が REVISE", r["reason"])
+        self.assertFalse((self.site / "column" / SLUGS[0]).exists())
+
+    def test_quality_repair_is_held_if_independent_review_revises_again(self):
+        good = sample_article(1)
+        r = self.run_pipeline(1, broken(good), [review(broken(good)), review(good, verdict="REVISE"),
+                                               review(good, verdict="REVISE")])
+        self.assertEqual(r["status"], "blocked", r)
+        self.assertIn("Claudeの審査結果が REVISE", r["reason"])
 
     def test_quality_failure_after_fix_round_is_held(self):
         bad = broken(sample_article(1))
@@ -201,6 +223,19 @@ class PipelineTest(unittest.TestCase):
         self.assertIn("品質ゲート: 出典番号のない数値", r["reason"])
         self.assertFalse((self.site / "column" / SLUGS[0]).exists())
         self.assertIn("保留(2026-11-11)", self.queue())
+
+    def test_revise_even_with_valid_article_stays_held_at_round_limit(self):
+        good = sample_article(1)
+        r = self.run_pipeline(1, good, [review(good, verdict="REVISE"), review(good, verdict="REVISE")])
+        self.assertEqual(r["status"], "blocked")
+        self.assertIn("Claudeの審査結果が REVISE", r["reason"])
+        self.assertFalse((self.site / "column" / SLUGS[0]).exists())
+
+    def test_revised_article_must_pass_separate_next_review(self):
+        good = sample_article(1)
+        r = self.run_pipeline(1, broken(good), [review(good, verdict="REVISE"), review(good)])
+        self.assertEqual(r["status"], "created", r)
+        self.check_site()
 
     def test_thin_article_is_held(self):
         thin = fx.thin_amount()
@@ -256,6 +291,42 @@ class ShipNotificationTest(unittest.TestCase):
         p = self.ship(res)
         self.assertEqual(p.returncode, 0, p.stderr)
         self.assertIn("テーマがありません", self.calls())
+
+
+class ReviewFeedbackTest(unittest.TestCase):
+    def test_initial_review_receives_all_twelve_diagnostics_without_mutating_draft(self):
+        import importlib.util
+        from unittest.mock import patch
+        spec = importlib.util.spec_from_file_location("pipeline_feedback_test", REPO / "tools/auto-publish/pipeline.py")
+        p = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(p)
+        d = REPO / "docs/proposals/coffee-storage-20261126"
+        article = json.loads((d / "original-article.json").read_text())
+        before = copy.deepcopy(article)
+        task = {"主キーワード": "コーヒー豆 保存方法", "補助キーワード": "コーヒー豆 冷凍;粉 保存 期間"}
+        with patch.object(p, "categories", return_value=["storage"]):
+            feedback = p.review_quality_feedback(article, task, [])
+        self.assertEqual(feedback.count("数値の出典位置候補"), 12)
+        self.assertIn("body_units[0]", feedback)
+        self.assertEqual(article, before)
+        prompt = p.prompts.REVIEWER_USER.format(theme="保存", main_kw="保存", existing="なし",
+                                               quality_errors=feedback, article=json.dumps(article), sources="取得本文")
+        self.assertIn(feedback, prompt)
+        self.assertIn("取得本文", prompt)
+
+    def test_feedback_does_not_treat_citation_as_evidence(self):
+        import importlib.util
+        from unittest.mock import patch
+        spec = importlib.util.spec_from_file_location("pipeline_feedback_limits", REPO / "tools/auto-publish/pipeline.py")
+        p = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(p)
+        article = json.loads((REPO / "docs/proposals/coffee-storage-20261126/article.json").read_text())
+        article["lead"] += "保存できる期間は99週間です [1]。"
+        with patch.object(p, "categories", return_value=["storage"]):
+            feedback = p.review_quality_feedback(article, {"主キーワード": "", "補助キーワード": ""}, [])
+        # 番号は実在しても内容は保証しない。ここで PASS のお墨付きを返さない。
+        self.assertIn("根拠の照合は別途必要", feedback)
+        self.assertIn("sources.note は証拠として扱わない", p.prompts.REVIEWER_SYSTEM)
 
 
 if __name__ == "__main__":

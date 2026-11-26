@@ -302,6 +302,23 @@ def quality_check(article, task, existing):
                                     [a["article"] for a in existing], categories())
 
 
+def review_quality_feedback(article, task, existing):
+    """同じ品質ゲートの診断を通常審査にも渡す。判定や原稿を変更しない。"""
+    result = quality_check(article, task, existing)
+    lines = [f"- {e}" for e in result["errors"]]
+    normalized = article_quality.deep(article, article_quality.clean)
+    units = [(f"body_units[{i}]", u) for i, u in enumerate(article_quality.body_units(normalized))]
+    units += [(f"{key}[{i}]", u) for key in ("can_do", "checklist")
+              for i, u in enumerate(normalized.get(key, []))]
+    for path, unit in units:
+        for sentence in re.split(r"(?<=[。！？!?])", str(unit)):
+            if (article_quality.NUMBER_WITH_UNIT.search(article_quality.strip_cites(sentence))
+                    and not article_quality.CITE.search(sentence)):
+                lines.append(f"- 数値の出典位置候補 {path}: {sentence.strip()} / "
+                             "出典本文を確認し、配置ミス・根拠不足・提案の混在を区別する")
+    return "\n".join(lines) or "機械診断で不合格なし（根拠の照合は別途必要）"
+
+
 def append_run_log(date, lines):
     p = ROOT / "docs/run-log.md"
     text = p.read_text(encoding="utf-8").rstrip("\n") if p.exists() else "# 自動記事パイプライン 実行ログ"
@@ -349,10 +366,21 @@ def run():
         article = r.get("article") or article
         ymyl = max([str(r.get("ymyl", "中")), task["YMYL区分"], ymyl], key=lambda x: YMYL_ORDER.get(x, 1))
 
-    for _ in range(cfg["max_review_rounds"]):
-        apply_review(ask_claude(prompts.REVIEWER_SYSTEM, prompts.REVIEWER_USER.format(
+    review_rounds_used = 0
+
+    def normal_review():
+        nonlocal review_rounds_used
+        review_rounds_used += 1
+        user = prompts.REVIEWER_USER.format(
             theme=task["テーマ"], main_kw=task["主キーワード"], existing=existing_desc,
-            article=json.dumps(article, ensure_ascii=False, indent=1), sources=source_report())))
+            article=json.dumps(article, ensure_ascii=False, indent=1), sources=source_report(),
+            quality_errors=review_quality_feedback(article, task, existing))
+        user += "\n\n## 前回までの指摘（解決済みか確認し、解決済みの表現を再導入しない）\n"
+        user += json.dumps(issues, ensure_ascii=False)
+        apply_review(ask_claude(prompts.REVIEWER_SYSTEM, user))
+
+    for _ in range(cfg["max_review_rounds"]):
+        normal_review()
         if verdict != "REVISE":
             break
 
@@ -367,6 +395,14 @@ def run():
             errors="\n".join(f"- {x}" for x in problems), article=json.dumps(article, ensure_ascii=False, indent=1),
             sources=source_report())))
         quality = quality_check(article, task, existing)
+        # 修復応答自身のPASSには依存しない。残っている通常審査の枠で
+        # 修正版を独立に再審査する（通常審査・修復それぞれの上限は増やさない）。
+        if verdict != "BLOCK":
+            verdict = "REVISE"
+            while (review_rounds_used < cfg["max_review_rounds"] and quality["pass"]
+                   and not coverage_errors(review) and verdict == "REVISE"):
+                normal_review()
+                quality = quality_check(article, task, existing)
 
     errs = validate(article, cfg, existing_slugs)
     errs += [f"品質ゲート: {x}" for x in quality["errors"]]
