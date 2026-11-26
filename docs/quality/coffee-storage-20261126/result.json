@@ -1,0 +1,42 @@
+{
+  "pass": true,
+  "candidate_sha256": "e46a68aa13bfb993f5e7a4ccae4cda72833aee356fb5e6a6dcacfd3d13012bc5",
+  "errors": [],
+  "verdict": "PASS",
+  "ymyl": "中",
+  "quality": {
+    "pass": true,
+    "errors": [],
+    "warnings": [],
+    "metrics": {
+      "informative_tables": 1,
+      "duplicate_sentences": 0,
+      "filler_per_1000": 0.16,
+      "hedge_per_1000": 0.16,
+      "keyword_max_per_1000": 1.4,
+      "uncited_numbers": 0,
+      "citations": 64,
+      "cited_units": 26,
+      "sources_cited": 2,
+      "unanchored_h2": 0,
+      "same_sentences": 0,
+      "near_sentence_share": 0.0,
+      "number_overlap": 0.0,
+      "max_similarity": 0.068,
+      "chars": 6315
+    }
+  },
+  "rounds": 1,
+  "sources": [
+    {
+      "url": "https://www.aboutcoffee.org/beans/storage-and-shelf-life/",
+      "verified": true,
+      "text_chars": 7538
+    },
+    {
+      "url": "https://www.caa.go.jp/policies/policy/food_labeling/food_sanitation/expiration_date/",
+      "verified": true,
+      "text_chars": 2902
+    }
+  ]
+}

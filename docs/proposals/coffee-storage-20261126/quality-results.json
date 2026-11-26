@@ -30,19 +30,19 @@
     "metrics": {
       "informative_tables": 1,
       "duplicate_sentences": 0,
-      "filler_per_1000": 0.0,
-      "hedge_per_1000": 0.17,
-      "keyword_max_per_1000": 1.6,
+      "filler_per_1000": 0.16,
+      "hedge_per_1000": 0.16,
+      "keyword_max_per_1000": 1.4,
       "uncited_numbers": 0,
-      "citations": 40,
+      "citations": 64,
       "cited_units": 26,
       "sources_cited": 2,
       "unanchored_h2": 0,
       "same_sentences": 0,
       "near_sentence_share": 0.0,
       "number_overlap": 0.0,
-      "max_similarity": 0.064,
-      "chars": 5763
+      "max_similarity": 0.068,
+      "chars": 6315
     }
   }
 }
