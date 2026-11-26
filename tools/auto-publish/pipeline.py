@@ -366,11 +366,21 @@ def run():
         article = r.get("article") or article
         ymyl = max([str(r.get("ymyl", "中")), task["YMYL区分"], ymyl], key=lambda x: YMYL_ORDER.get(x, 1))
 
-    for _ in range(cfg["max_review_rounds"]):
-        apply_review(ask_claude(prompts.REVIEWER_SYSTEM, prompts.REVIEWER_USER.format(
+    review_rounds_used = 0
+
+    def normal_review():
+        nonlocal review_rounds_used
+        review_rounds_used += 1
+        user = prompts.REVIEWER_USER.format(
             theme=task["テーマ"], main_kw=task["主キーワード"], existing=existing_desc,
             article=json.dumps(article, ensure_ascii=False, indent=1), sources=source_report(),
-            quality_errors=review_quality_feedback(article, task, existing))))
+            quality_errors=review_quality_feedback(article, task, existing))
+        user += "\n\n## 前回までの指摘（解決済みか確認し、解決済みの表現を再導入しない）\n"
+        user += json.dumps(issues, ensure_ascii=False)
+        apply_review(ask_claude(prompts.REVIEWER_SYSTEM, user))
+
+    for _ in range(cfg["max_review_rounds"]):
+        normal_review()
         if verdict != "REVISE":
             break
 
@@ -385,6 +395,14 @@ def run():
             errors="\n".join(f"- {x}" for x in problems), article=json.dumps(article, ensure_ascii=False, indent=1),
             sources=source_report())))
         quality = quality_check(article, task, existing)
+        # 修復応答自身のPASSには依存しない。残っている通常審査の枠で
+        # 修正版を独立に再審査する（通常審査・修復それぞれの上限は増やさない）。
+        if verdict != "BLOCK":
+            verdict = "REVISE"
+            while (review_rounds_used < cfg["max_review_rounds"] and quality["pass"]
+                   and not coverage_errors(review) and verdict == "REVISE"):
+                normal_review()
+                quality = quality_check(article, task, existing)
 
     errs = validate(article, cfg, existing_slugs)
     errs += [f"品質ゲート: {x}" for x in quality["errors"]]

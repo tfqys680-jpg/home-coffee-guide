@@ -187,12 +187,34 @@ class PipelineTest(unittest.TestCase):
         self.check_site()
 
     # ---- 品質ゲート（D2: 落ちたら指摘を渡して1回推敲し直す）
-    def test_quality_failure_is_fixed_in_one_more_round(self):
+    def test_quality_failure_is_fixed_and_independently_reviewed(self):
         good = sample_article(1)
         bad = broken(good)
-        r = self.run_pipeline(1, bad, [review(bad), review(good)])
+        r = self.run_pipeline(1, bad, [review(bad), review(good, verdict="REVISE"), review(good)])
         self.assertEqual(r["status"], "created", r)
         self.check_site()
+
+    def test_quality_repair_pass_also_requires_an_independent_review(self):
+        good = sample_article(1)
+        # 修復応答が誤ってPASSでも、その応答だけでは公開しない。
+        r = self.run_pipeline(1, broken(good), [review(broken(good)), review(good), review(good, verdict="BLOCK")])
+        self.assertEqual(r["status"], "blocked", r)
+        self.assertIn("Claudeの審査結果が BLOCK", r["reason"])
+
+    def test_quality_repair_stays_held_without_remaining_review_budget(self):
+        good = sample_article(1)
+        bad = broken(good)
+        r = self.run_pipeline(1, bad, [review(bad, verdict="REVISE"), review(bad), review(good, verdict="REVISE")])
+        self.assertEqual(r["status"], "blocked", r)
+        self.assertIn("Claudeの審査結果が REVISE", r["reason"])
+        self.assertFalse((self.site / "column" / SLUGS[0]).exists())
+
+    def test_quality_repair_is_held_if_independent_review_revises_again(self):
+        good = sample_article(1)
+        r = self.run_pipeline(1, broken(good), [review(broken(good)), review(good, verdict="REVISE"),
+                                               review(good, verdict="REVISE")])
+        self.assertEqual(r["status"], "blocked", r)
+        self.assertIn("Claudeの審査結果が REVISE", r["reason"])
 
     def test_quality_failure_after_fix_round_is_held(self):
         bad = broken(sample_article(1))
