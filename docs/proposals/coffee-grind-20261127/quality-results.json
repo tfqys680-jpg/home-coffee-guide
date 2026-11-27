@@ -1,0 +1,49 @@
+{
+  "pass": true,
+  "errors": [],
+  "warnings": [],
+  "metrics": {
+    "informative_tables": 1,
+    "duplicate_sentences": 0,
+    "filler_per_1000": 0.0,
+    "hedge_per_1000": 0.0,
+    "keyword_max_per_1000": 3.1,
+    "uncited_numbers": 0,
+    "citations": 36,
+    "cited_units": 19,
+    "sources_cited": 5,
+    "unanchored_h2": 0,
+    "same_sentences": 0,
+    "near_sentence_share": 0.0,
+    "number_overlap": 0.0,
+    "max_similarity": 0.083,
+    "chars": 4802
+  },
+  "pipeline_validate": {
+    "pass": true,
+    "errors": [],
+    "method": "最新mainのall_text/validate関数を変更せず実行。既存記事は取得済み3記事を入力。"
+  },
+  "claude_review": {
+    "status": "未実施",
+    "publication_approval": "未承認",
+    "note": "元のREVISEをPASSに変更していない。修正版の独立審査が必要。"
+  },
+  "reference_integrity": {
+    "article_quality.py": {
+      "matches_repository_blob": true,
+      "git_blob_sha": "2a4448c0abe249a8e476647e6dcef0d4507c35fc",
+      "sha256": "99c123bc7e16e6cf03a2828098b6ca3858a7698831401793f562865d48e12909"
+    },
+    "pipeline.py": {
+      "matches_repository_blob": true,
+      "git_blob_sha": "72744918a91adf3e5969aa82a34f69926d4aa8c6",
+      "sha256": "b1f0356a691885ea3cf9969c52ac2eb390a2d4eef34db119ea8e54c4d069f0e0"
+    },
+    "config.json": {
+      "matches_repository_blob": true,
+      "git_blob_sha": "8f688375231e44fabe5ec2451fe522ff35ad261c",
+      "sha256": "c9b443b677cc86ee81a73278038799ed534f7eb709726b6c34413daf098ec623"
+    }
+  }
+}

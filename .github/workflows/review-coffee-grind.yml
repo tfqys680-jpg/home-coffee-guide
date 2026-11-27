@@ -1,0 +1,26 @@
+name: review-coffee-grind
+# 挽き目記事の修正版を公開前に独立審査する一時ワークフロー（公開前に削除する）
+on:
+  pull_request:
+    types: [opened, synchronize]
+permissions:
+  contents: read
+jobs:
+  review:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'claude/coffee-grind-size-guide-20261127'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Review candidate with actual source text
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_MODEL: ${{ vars.ANTHROPIC_MODEL }}
+          REVIEW_OUTPUT: ${{ runner.temp }}/coffee-review
+        run: python3 tools/auto-publish/review_grind_candidate.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coffee-grind-review
+          path: ${{ runner.temp }}/coffee-review
+          retention-days: 14
