@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pipeline as p
 
-PROPOSAL = p.ROOT / "docs/proposals/coffee-grind-20261127"
+QUALITY = p.ROOT / "docs/quality/coffee-grind-20261127"
 
 
 def write(path, obj):
@@ -19,10 +19,9 @@ def write(path, obj):
 
 
 def main():
-    candidate = PROPOSAL / "article.json"
-    wrapper = json.loads(candidate.read_text(encoding="utf-8"))
-    article = dict(wrapper["article"])
-    article["related"] = list(wrapper.get("related", []))
+    # 再提出: 初回審査（run 45952100839）で直された版を、新しい審査枠で独立に再審査する
+    candidate = QUALITY / "resubmission-article.json"
+    article = json.loads(candidate.read_text(encoding="utf-8"))
     out = Path(os.environ["REVIEW_OUTPUT"])
     (out / "sources").mkdir(parents=True, exist_ok=True)
     cfg = json.loads((p.HERE / "config.json").read_text(encoding="utf-8"))
@@ -30,7 +29,7 @@ def main():
     task = {"テーマ": "挽き目（粗さ）の選び方と味の違い", "主キーワード": "コーヒー 挽き目 違い",
             "補助キーワード": "中挽き 細挽き;ドリップ 挽き目"}
     existing = p.existing_articles()
-    prior = json.loads((PROPOSAL / "original-rejected.json").read_text(encoding="utf-8")).get("issues", [])
+    prior = json.loads((QUALITY / "previous-findings.json").read_text(encoding="utf-8"))
     history, fetched = [], {}
     result = {"pass": False, "candidate_sha256": hashlib.sha256(candidate.read_bytes()).hexdigest()}
     try:

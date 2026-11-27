@@ -1,0 +1,37 @@
+{
+  "pass": false,
+  "candidate_sha256": "be814214e41ad54e56c0bb8584177c7347b3e894a2a7286edf9c1c32d2ceb8f9",
+  "verdict": "REVISE",
+  "errors": [
+    "審査上限内にPASSとならなかった"
+  ],
+  "rounds": 2,
+  "sources": [
+    {
+      "url": "https://coffee.ajca.or.jp/column/4472/",
+      "verified": true,
+      "text_chars": 2481
+    },
+    {
+      "url": "https://bluebottlecoffee.com/us/eng/brew-guides/french-press",
+      "verified": true,
+      "text_chars": 4583
+    },
+    {
+      "url": "https://bluebottlecoffee.com/brew-guides/pour-over?creative_details=8-11000",
+      "verified": true,
+      "text_chars": 3963
+    },
+    {
+      "url": "https://bluebottlecoffee.com/us/eng/brew-guides/hot-over-ice",
+      "verified": true,
+      "text_chars": 4027
+    },
+    {
+      "url": "https://www.ucc.co.jp/enjoy/brew/goodcoffee_grind_02.html",
+      "verified": true,
+      "text_chars": 4343
+    }
+  ],
+  "review_run_url": "https://github.com/tfqys680-jpg/home-coffee-guide/actions/runs/45952100839"
+}
