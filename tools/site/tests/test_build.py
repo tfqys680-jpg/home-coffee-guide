@@ -4,7 +4,7 @@
 サイトを一時ディレクトリへ複製して build.py と check.py を実行する。リポジトリ本体は変更しない。
 実行: python3 tools/site/tests/test_build.py
 """
-import hashlib
+import atexit
 import hashlib
 import importlib.util
 import json
@@ -19,6 +19,12 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[3]
 SLUG = "zz-test-human-check"
+sys.path.insert(0, str(REPO / "tools/media"))
+from media_spec import visual_hash  # noqa: E402
+
+# 記事にはアイキャッチ・図解動画が必須（check.py が確かめる）。同じ visual なら一度作ったものを使い回す
+MEDIA_CACHE = Path(tempfile.mkdtemp(prefix="coffee-media-cache-"))
+atexit.register(shutil.rmtree, MEDIA_CACHE, True)
 
 
 def sample_article():
@@ -61,6 +67,19 @@ class BuildTest(unittest.TestCase):
         d = self.site / "content/articles"
         d.mkdir(parents=True, exist_ok=True)
         (d / f"{SLUG}.json").write_text(json.dumps(item, ensure_ascii=False, indent=1), encoding="utf-8")
+        self.make_media(item)
+
+    def make_media(self, item):
+        cached = MEDIA_CACHE / visual_hash(item)
+        if not cached.exists():
+            p = subprocess.run([sys.executable, str(self.site / "tools/media/make_media.py"), item["slug"]], env=self.env,
+                               capture_output=True, text=True)
+            self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+            shutil.copytree(self.site / "images/articles" / item["slug"], cached)
+        dest = self.site / "images/articles" / item["slug"]
+        dest.mkdir(parents=True, exist_ok=True)
+        for f in cached.iterdir():
+            shutil.copy2(f, dest / f.name)
 
     def add_photo(self, name="drip.jpg"):
         d = self.site / "images/articles" / SLUG
@@ -88,9 +107,51 @@ class BuildTest(unittest.TestCase):
         featured = self.page(f"column/{feature_slug}/index.html")
         self.assertIn('src="../../images/editorial/brew-pour-demo.mp4"', featured)
         self.assertIn('<video controls playsinline preload="none"', featured)
-        self.assertNotIn("autoplay", featured)
+        self.assertNotRegex(featured, r"<video[^>]*\sautoplay")
         self.assertIn("動画を文章で読む", featured)
-        self.assertNotIn("<video", self.page(f"column/{SLUG}/index.html"))
+        plain_page = self.page(f"column/{SLUG}/index.html")
+        self.assertNotIn("brew-pour-demo.mp4", plain_page)
+        # どの記事にも図解動画が付く。HTMLの autoplay 属性は使わず、読み込みは画面に入るまで待つ（preload="none"）
+        self.assertIn(f'src="../../images/articles/{SLUG}/explainer.mp4"', plain_page)
+        self.assertIn('<video controls muted playsinline preload="none"', plain_page)
+        self.assertNotRegex(plain_page, r"<video[^>]*\sautoplay")
+
+    def test_shop_links_become_affiliate_links_with_disclosure(self):
+        self.add_article()
+        self.build()
+        page = self.page(f"column/{SLUG}/index.html")
+        self.assertIn('https://www.amazon.co.jp/s?k=', page)
+        self.assertNotIn("tag=", page)
+        self.assertNotIn('class="pr-note"', page)
+        self.assertNotIn("sponsored", page)
+        self.assert_check_ok()
+        self.set_site(affiliate={"amazon_tag": "coffeetest-22", "rakuten_affiliate_id": "1a2b3c4d.5e6f7a8b.1a2b3c4d.5e6f7a8c"})
+        self.build()
+        page = self.page(f"column/{SLUG}/index.html")
+        self.assertIn("&amp;tag=coffeetest-22", page)
+        self.assertIn("https://hb.afl.rakuten.co.jp/hgc/1a2b3c4d.5e6f7a8b.1a2b3c4d.5e6f7a8c/?pc=", page)
+        self.assertIn('rel="sponsored noopener"', page)
+        self.assertIn('class="pr-note"', page)
+        self.assertIn('<span class="shop-pr">PR</span>', page)
+        self.assertIn("Amazonのアソシエイトとして", self.page("disclaimer.html"))
+        self.assert_check_ok()
+
+    def test_media_and_shop_are_required_on_article_pages(self):
+        self.add_article()
+        self.build()
+        self.assert_check_ok()
+        shutil.rmtree(self.site / "images/articles" / SLUG)
+        self.build()
+        p = subprocess.run([sys.executable, str(self.site / "tools/site/check.py")], env=self.env, capture_output=True, text=True)
+        self.assertEqual(p.returncode, 1, p.stdout)
+        self.assertIn("画像・動画がない", p.stdout)
+
+    def test_in_view_playback_respects_reduced_motion_and_data_saver(self):
+        js = (self.site / "js/main.js").read_text(encoding="utf-8")
+        self.assertIn("prefers-reduced-motion: reduce", js)
+        self.assertIn("saveData", js)
+        self.assertIn("v.muted = true", js)
+        self.assertIn("affiliate_click", js)
 
     def test_blueprint_actions_target_matching_sections_without_displacing_legacy_links(self):
         self.build()
@@ -111,7 +172,7 @@ class BuildTest(unittest.TestCase):
         self.assertIn(f'href="column/{slug}/#brew-studio-title"', index)
         self.assertIn('id="brew-studio-title"', page)
         self.assertIn('紙フィルターがいらない、多孔質セラミック', page)
-        self.assertNotIn('autoplay', page)
+        self.assertNotRegex(page, r"<video[^>]*\sautoplay")
 
     def test_entry_asset_fingerprints_follow_bytes_not_paths(self):
         self.add_article()
@@ -316,6 +377,7 @@ class BuildTest(unittest.TestCase):
         other = dict(json.loads((self.site / f"content/articles/{SLUG}.json").read_text(encoding="utf-8")), slug="slow-drip-fix")
         other["article"] = dict(other["article"], title="ドリップが遅いときの直し方", breadcrumb="遅いとき")
         (self.site / "content/articles/slow-drip-fix.json").write_text(json.dumps(other, ensure_ascii=False), encoding="utf-8")
+        self.make_media(other)
         self.build()
         page = self.page(f"column/{SLUG}/index.html")
         self.assertIn('<a href="../slow-drip-fix/">ドリップが遅いときの直し方</a>', page)
@@ -336,8 +398,10 @@ class BuildTest(unittest.TestCase):
         self.assertIn("人による実際の試飲や器具のテストは行っていません", page)
         self.assertNotIn('class="operator-note"', page)
         # 写真がないときはサイト共通のOGP画像を使う
-        self.assertEqual(self.article_ld()["image"], ["https://tfqys680-jpg.github.io/home-coffee-guide/images/ogp.png"])
-        self.assertIn('<meta property="og:image" content="https://tfqys680-jpg.github.io/home-coffee-guide/images/ogp.png">', page)
+        # 運営者の写真がない記事は、記事ごとに作ったOGP画像とアイキャッチを使う
+        media = f"https://tfqys680-jpg.github.io/home-coffee-guide/images/articles/{SLUG}/"
+        self.assertEqual(self.article_ld()["image"], [media + "og.jpg", media + "eyecatch.webp"])
+        self.assertIn(f'<meta property="og:image" content="{media}og.jpg">', page)
         self.assert_check_ok()
 
     def test_manual_review_does_not_claim_automated_claude_review(self):
@@ -373,7 +437,7 @@ class BuildTest(unittest.TestCase):
         self.assertNotIn("人による実際の試飲や器具のテストは行っていません", page)
         self.assertIn("それ以外の本文", page)
         ld = self.article_ld()
-        self.assertEqual(ld["image"], ["https://tfqys680-jpg.github.io/home-coffee-guide/" + src])
+        self.assertEqual(ld["image"][0], "https://tfqys680-jpg.github.io/home-coffee-guide/" + src)
         self.assertIn(f'<meta property="og:image" content="https://tfqys680-jpg.github.io/home-coffee-guide/{src}">', page)
         self.assertEqual(ld["dateModified"], "2026-11-22")
         self.assertEqual(ld["contributor"]["@type"], "Person")

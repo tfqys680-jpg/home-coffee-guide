@@ -127,7 +127,33 @@ class PipelineTest(unittest.TestCase):
         self.assertEqual(saved["sub_kw"], QUEUE[0][2])
         self.assertTrue(saved["pipeline"]["coverage"])
         self.assertIn("品質ゲート: 合格", self.runlog())
+        # 自動記事にもアイキャッチ・OGP画像・図解動画が付き、記事ページと一覧に出る
+        media = self.site / "images/articles" / SLUGS[0]
+        for name in ("eyecatch.webp", "eyecatch-640.webp", "og.jpg", "explainer.mp4", "explainer-poster.webp", "media.json"):
+            self.assertTrue((media / name).exists(), name)
+        self.assertIn('<figure class="eyecatch">', page1)
+        self.assertIn('<figure class="diagram', page1)
+        self.assertIn("explainer.mp4", page1)
+        self.assertIn('data-shop="amazon"', page1)
+        self.assertIn(f"images/articles/{SLUGS[0]}/og.jpg", page1)
+        self.assertIn('class="card-thumb"', index)
         self.check_site()
+
+    def test_article_without_visual_or_shopping_is_held(self):
+        art = sample_article(1)
+        del art["visual"], art["shopping"]
+        r = self.run_pipeline(1, art, [review(art), review(art)])
+        self.assertEqual(r["status"], "blocked", r)
+        self.assertIn("visual", r["reason"])
+        self.assertIn("shopping", r["reason"])
+        self.assertFalse((self.site / "images/articles" / SLUGS[0]).exists())
+
+    def test_recommendation_words_in_shopping_are_held(self):
+        art = sample_article(1)
+        art["shopping"][0]["reason"] = "人気のスケールで、使いやすいのでおすすめです。粉の量をそろえたいときに。"
+        r = self.run_pipeline(1, art, [review(art), review(art)])
+        self.assertEqual(r["status"], "blocked", r)
+        self.assertIn("推奨・順位づけの言葉", r["reason"])
 
     def test_high_ymyl_waits_for_review(self):
         r = self.publish(1, ymyl="高")
@@ -321,12 +347,30 @@ class ReviewFeedbackTest(unittest.TestCase):
         p = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(p)
         article = json.loads((REPO / "docs/proposals/coffee-storage-20261126/article.json").read_text())
+        # 保存時の原稿には図解と商品の検索リンクがなかった（後から必須にした）。公開版のものを足す
+        published = json.loads((REPO / "content/articles/coffee-bean-storage.json").read_text())["article"]
+        article["visual"], article["shopping"] = published["visual"], published["shopping"]
         article["lead"] += "保存できる期間は99週間です [1]。"
         with patch.object(p, "categories", return_value=["storage"]):
             feedback = p.review_quality_feedback(article, {"主キーワード": "", "補助キーワード": ""}, [])
         # 番号は実在しても内容は保証しない。ここで PASS のお墨付きを返さない。
         self.assertIn("根拠の照合は別途必要", feedback)
         self.assertIn("sources.note は証拠として扱わない", p.prompts.REVIEWER_SYSTEM)
+
+
+
+class MediaRuleTest(unittest.TestCase):
+    """自動記事にはアイキャッチ・図解動画が必ず付く。visual のない原稿は品質ゲートで保留になる。"""
+
+    def test_writer_and_reviewer_are_told_to_write_visual_and_shopping(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("prompts_media", REPO / "tools/auto-publish/prompts.py")
+        pr = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(pr)
+        for key in ('"visual"', '"diagram"', '"shopping"', '"cite"'):
+            self.assertIn(key, pr.ARTICLE_SCHEMA)
+        self.assertIn("visual", pr.REVIEWER_SYSTEM)
+        self.assertIn("shopping", pr.REVIEWER_SYSTEM)
 
 
 if __name__ == "__main__":

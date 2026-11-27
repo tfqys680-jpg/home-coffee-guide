@@ -7,6 +7,8 @@
 - 記事本文に禁止表現（健康効果の断定など）がない
 - 画像ファイルが存在し、alt が空でない
 - 運営者の確認メモ（運営者本人が書く欄）は体験の表現だけを許し、健康効果の断定などは本文と同じく禁止
+- 記事ページ: アイキャッチ・図解・図解動画（文字版つき）・商品の検索リンク・画像つきの「次に読む」があり、
+  画像と動画（images/articles/<slug>/）が記事の visual から作り直されていて、大きさと重さが上限以内
 """
 import html
 import json
@@ -18,6 +20,8 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 ROOT = Path(os.environ.get("SITE_ROOT", Path(__file__).resolve().parents[2]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "media"))
+from media_spec import MAX_BYTES, MEDIA_FILES, VIDEO_SECONDS, visual_hash  # noqa: E402
 
 
 OPERATOR_NOTE = re.compile(r'<aside class="operator-note".*?</aside>', re.S)
@@ -34,12 +38,94 @@ def text_of(fragment):
     return re.sub(r"\s+", " ", t).strip()
 
 
+def image_size(path):
+    """WebP・JPEG の幅と高さ（Pillow を使わずにヘッダーから読む）。読めなければ None。"""
+    b = path.read_bytes()[:65536]
+    if b[:4] == b"RIFF" and b[8:12] == b"WEBP":
+        kind = b[12:16]
+        if kind == b"VP8 ":
+            return int.from_bytes(b[26:28], "little") & 0x3FFF, int.from_bytes(b[28:30], "little") & 0x3FFF
+        if kind == b"VP8L":
+            v = int.from_bytes(b[21:25], "little")
+            return (v & 0x3FFF) + 1, ((v >> 14) & 0x3FFF) + 1
+        if kind == b"VP8X":
+            return int.from_bytes(b[24:27], "little") + 1, int.from_bytes(b[27:30], "little") + 1
+    if b[:2] == b"\xff\xd8":
+        i = 2
+        while i + 9 < len(b):
+            if b[i] != 0xFF:
+                i += 1
+                continue
+            marker, size = b[i + 1], int.from_bytes(b[i + 2:i + 4], "big")
+            if marker in (0xC0, 0xC1, 0xC2):
+                return int.from_bytes(b[i + 7:i + 9], "big"), int.from_bytes(b[i + 5:i + 7], "big")
+            i += 2 + size
+    return None
+
+
+EXPECTED_SIZE = {"eyecatch.webp": (1200, 675), "eyecatch-640.webp": (640, 360), "og.jpg": (1200, 630),
+                 "explainer-poster.webp": (1280, 720)}
+
+
+def article_media_errors(rel, src, item, site):
+    """記事ページの見た目と導線（滞在時間と商品ページへの移動のための必須要素）。"""
+    errors = []
+    slug = item["slug"]
+    d = ROOT / "images/articles" / slug
+    manifest = d / "media.json"
+    if not manifest.exists():
+        return [f"{rel}: 画像・動画がない（python3 tools/media/make_media.py {slug}）"]
+    m = json.loads(manifest.read_text(encoding="utf-8"))
+    if m.get("visual_sha256") != visual_hash(item):
+        errors.append(f"{rel}: 画像・動画が記事の visual と合っていない（python3 tools/media/make_media.py {slug}）")
+    lo, hi = VIDEO_SECONDS
+    if not lo <= float(m.get("video_seconds", 0)) <= hi:
+        errors.append(f"{rel}: 図解動画の長さが{lo}〜{hi}秒の範囲外")
+    for name in MEDIA_FILES:
+        f = d / name
+        if not f.exists():
+            errors.append(f"{rel}: {name} がない")
+            continue
+        if f.stat().st_size > MAX_BYTES[name]:
+            errors.append(f"{rel}: {name} が重すぎる（{f.stat().st_size:,}バイト、上限{MAX_BYTES[name]:,}）")
+        if name in EXPECTED_SIZE and image_size(f) != EXPECTED_SIZE[name]:
+            errors.append(f"{rel}: {name} の大きさが {image_size(f)}（{EXPECTED_SIZE[name]} にする）")
+    base = f"images/articles/{slug}/"
+    needs = {
+        "アイキャッチ": f'<figure class="eyecatch"><img src="../../{base}eyecatch.webp"',
+        "図解": '<figure class="diagram',
+        "図解動画": f'poster="../../{base}explainer-poster.webp"',
+        "動画の文字版": 'class="faq transcript"',
+        "商品の検索リンク": '<aside class="shop" id="shop"',
+        "記事末の検索リンク": '<aside class="shop-mini"',
+    }
+    if len(list((ROOT / "content/articles").glob("*.json"))) > 1:
+        needs["画像つきの「次に読む」"] = 'class="next-read"'
+        if not re.search(r'<section class="next-read".*?class="card-thumb"', src, re.S):
+            errors.append(f"{rel}: 「次に読む」にサムネイル画像がない")
+    for name, marker in needs.items():
+        if marker not in src:
+            errors.append(f"{rel}: {name}がない")
+    if f'<source src="../../{base}explainer.mp4"' not in src:
+        errors.append(f"{rel}: 図解動画のファイルを参照していない")
+    if src.count('data-shop="') < 4:
+        errors.append(f"{rel}: 商品の検索リンクが少ない（記事中と記事末で各2件以上）")
+    if not (item.get("operator") or {}).get("photos") and f'{base}og.jpg"' not in src:
+        errors.append(f"{rel}: SNS共有用の画像（og:image）が記事の og.jpg になっていない")
+    aff = site.get("affiliate") or {}
+    if aff.get("amazon_tag") or aff.get("rakuten_affiliate_id"):
+        if 'class="pr-note"' not in src or 'rel="sponsored noopener"' not in src:
+            errors.append(f"{rel}: アフィリエイトリンクに広告表記（PR）か rel=\"sponsored\" がない")
+    return errors
+
+
 def main():
     errors = []
     pages = sorted(p for p in ROOT.rglob("*.html") if ".git" not in p.parts and "node_modules" not in p.parts
                    and not str(p.relative_to(ROOT)).startswith(("tools/", "content/", "docs/")))
     titles = {}
     cfg = load_config()
+    site = json.loads((ROOT / "site.json").read_text(encoding="utf-8"))
     banned = cfg["banned_phrases"]
     note_allowed = set(cfg.get("operator_note_allowed_phrases", []))
     for page in pages:
@@ -93,6 +179,12 @@ def main():
             for phrase in banned:
                 if phrase in body or (phrase not in note_allowed and phrase in note):
                     errors.append(f"{rel}: 禁止表現「{phrase}」")
+            src_json = ROOT / "content/articles" / f"{page.parent.name}.json"
+            if src_json.exists():
+                errors += article_media_errors(rel, src, json.loads(src_json.read_text(encoding="utf-8")), site)
+            for attr in re.findall(r'(?:poster|<source src)="([^"]+)"', src):
+                if not attr.startswith(("http://", "https://")) and not (page.parent / urlparse(attr).path).resolve().exists():
+                    errors.append(f"{rel}: 動画のファイルがない {attr}")
     for title, where in titles.items():
         if len(where) > 1:
             errors.append(f"タイトル重複「{title}」: {where}")

@@ -4,11 +4,12 @@
 1. docs/auto-queue.csv から次のテーマを選ぶ（空なら両AIでテーマを補充）
 2. ChatGPT が記事原稿をJSONで作成
 3. 出典URLを実際に取得し、本文を Claude に渡して照合・推敲（最大 max_review_rounds 回）
-4. 機械検証（禁止表現・構成・出典数・関連記事）
-5. content/articles/<slug>.json を保存し、tools/site/build.py でサイトを再生成
+4. 機械検証（禁止表現・構成・出典数・関連記事・図解と商品の検索リンク）
+5. content/articles/<slug>.json を保存し、アイキャッチ・図解動画を作って（tools/media/make_media.py）、
+   tools/site/build.py でサイトを再生成
 6. 結果を --result のJSONに書く（GitHub Actions がPR作成・自動マージを判断）
 
-外部ライブラリ不要（Python標準ライブラリのみ）。
+記事作成は Python 標準ライブラリのみ。画像・動画の生成に Pillow と ffmpeg、日本語フォント（fonts-noto-cjk）を使う。
 環境変数: OPENAI_API_KEY, OPENAI_MODEL, ANTHROPIC_API_KEY, ANTHROPIC_MODEL
 テスト用: AUTO_PUBLISH_MOCK=<フィクスチャのディレクトリ>、AUTO_PUBLISH_DATE=YYYY-MM-DD、SITE_ROOT=<サイトの複製>
 """
@@ -218,6 +219,13 @@ def all_text(article):
                 parts += list(row)
     for f in article.get("faq", []):
         parts += [f.get("q", ""), f.get("a", "")]
+    v = article.get("visual") or {}
+    dg = v.get("diagram") or {}
+    parts += list(v.get("catch", [])) + [dg.get("title", ""), dg.get("caption", "")]
+    for it in dg.get("items", []):
+        parts += [it.get("label", ""), it.get("detail", ""), it.get("note", "")]
+    for it in article.get("shopping") or []:
+        parts += [it.get("label", ""), it.get("reason", "")]
     return "\n".join(str(p) for p in parts)
 
 
@@ -317,6 +325,16 @@ def review_quality_feedback(article, task, existing):
                 lines.append(f"- 数値の出典位置候補 {path}: {sentence.strip()} / "
                              "出典本文を確認し、配置ミス・根拠不足・提案の混在を区別する")
     return "\n".join(lines) or "機械診断で不合格なし（根拠の照合は別途必要）"
+
+
+def generate_media(slug):
+    """記事の visual からアイキャッチ・OGP画像・図解動画を作る（tools/media/make_media.py。Pillow と ffmpeg が必要）。"""
+    sys.path.insert(0, str(HERE.parent / "media"))
+    try:
+        import make_media
+        make_media.generate(slug)
+    except BaseException as ex:  # noqa: BLE001  フォントや ffmpeg がないときの SystemExit も止めて知らせる
+        raise PipelineError(f"アイキャッチ・図解動画の生成に失敗しました: {ex}") from ex
 
 
 def append_run_log(date, lines):
@@ -448,6 +466,7 @@ def run():
         if slug not in other.get("related", []):
             other.setdefault("related", []).append(slug)
             p.write_text(json.dumps(other, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+    generate_media(slug)
     build.build()
     set_queue_status(cfg, slug, f"公開({date.isoformat()})" if auto_merge else f"PR確認待ち({date.isoformat()})")
     log.append("結果: " + ("検証通過後に自動マージ・公開" if auto_merge else "YMYL高のためPRで確認待ち"))

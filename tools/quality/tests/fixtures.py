@@ -216,3 +216,54 @@ def good_long_mill():
         "sources": copy.deepcopy(SRC),
         "related": [],
     }
+
+
+# ---------------------------------------------------------------- アイキャッチ・図解・動画（visual）と商品の検索リンク（shopping）
+# 良い見本には必須要素として付ける（品質ゲートは visual と shopping がない原稿を落とす）。
+VISUALS = {
+    "good_amount": ({
+        "catch": ["粉の量は", "比率で決める"], "motif": "cup",
+        "diagram": {"type": "compare", "title": "杯数ごとの粉の量の目安", "caption": "テスト協会の解説の比率です[1]。",
+                    "items": [{"label": "1杯", "detail": "湯150mlに粉10g", "cite": [1]},
+                              {"label": "2杯", "detail": "湯300mlに粉18〜20g", "cite": [1]},
+                              {"label": "3杯", "detail": "湯450mlに粉27〜30g", "cite": [1]}]}}, [
+        {"label": "粉の重さを量れるキッチンスケール", "query": "キッチンスケール コーヒー",
+         "reason": "粉の量を湯量との比率で決めるなら、重さを量れるスケールがあると毎回の基準をそろえやすくなります。"},
+        {"label": "目盛り付きのコーヒーサーバー", "query": "コーヒーサーバー 目盛り",
+         "reason": "サーバーの目盛りで湯量を確かめながら注ぐと、量のずれが起きにくくなります。2杯分以上を淹れる日に使えます。"}]),
+    "good_slow_drip": ({
+        "catch": ["落ちるのが遅い", "原因は3つ"], "motif": "dripper",
+        "diagram": {"type": "compare", "title": "症状から見る原因と直し方",
+                    "items": [{"label": "最初から湯がたまる", "detail": "挽き目が細かすぎる", "note": "一段粗く挽く", "cite": [3]},
+                              {"label": "途中から遅くなる", "detail": "細かい粉がペーパーをふさぐ", "note": "注ぐ勢いを弱める", "cite": [3]},
+                              {"label": "粉の層が厚い", "detail": "粉が多すぎる", "note": "比率を見直す", "cite": [1]}]}}, [
+        {"label": "挽き目を調整できるコーヒーミル", "query": "コーヒーミル 挽き目 調整",
+         "reason": "挽き目が細かすぎて湯がたまるときは、一段粗く挽いて比べます[3]。段階を変えられるミルだと比べやすくなります。"},
+        {"label": "ドリッパーに合うペーパーフィルター", "query": "コーヒーフィルター 円すい",
+         "reason": "ペーパーを別の種類に替えて比べるときは、使っているドリッパーの形に合う紙を選びます。"}]),
+    "good_long_mill": ({
+        "catch": ["ミル選びは", "刃と回し方"], "motif": "mill",
+        "diagram": {"type": "compare", "title": "ミルの三つの組み合わせ",
+                    "items": [{"label": "手挽き・臼式", "detail": "粒がそろいやすい", "note": "1杯分で1〜2分", "cite": [1, 2]},
+                              {"label": "電動・臼式", "detail": "粒がそろいやすい", "note": "1杯分で10〜20秒", "cite": [1, 2]},
+                              {"label": "電動・プロペラ式", "detail": "粒がばらつきやすい", "note": "1杯分で5〜10秒", "cite": [2, 3]}]}}, [
+        {"label": "臼式の手挽きコーヒーミル", "query": "手挽き コーヒーミル 臼式",
+         "reason": "1〜2杯をゆっくり淹れるなら、粒がそろいやすい臼式の手挽きが候補になります[1]。"},
+        {"label": "臼式の電動コーヒーミル", "query": "電動 コーヒーミル 臼式",
+         "reason": "毎朝まとめて淹れるなら、挽く時間を短くしつつ粒もそろえやすい電動の臼式が候補になります[2]。"}]),
+}
+
+
+def _with_visual(fn):
+    def wrapped():
+        a = fn()
+        visual, shopping = VISUALS[fn.__name__]
+        a["visual"], a["shopping"] = copy.deepcopy(visual), copy.deepcopy(shopping)
+        return a
+    wrapped.__name__, wrapped.__doc__ = fn.__name__, fn.__doc__
+    return wrapped
+
+
+good_amount = _with_visual(good_amount)
+good_slow_drip = _with_visual(good_slow_drip)
+good_long_mill = _with_visual(good_long_mill)
