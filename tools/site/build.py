@@ -11,7 +11,7 @@ import json
 import os
 import re
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 ROOT = Path(os.environ.get("SITE_ROOT", Path(__file__).resolve().parents[2]))
 e = html.escape
@@ -183,6 +183,124 @@ def render_operator(site, op, rel):
 BREW_FEATURE = "hand-drip-taste-adjustment"
 PRESS_GUIDE = "french-press-how-to"
 EDITORIAL = "images/editorial/"
+ARTICLE_MEDIA = "images/articles/"
+
+
+def media_of(slug):
+    """tools/media/make_media.py が作った画像・動画（images/articles/<slug>/）。なければ None。"""
+    m = ROOT / ARTICLE_MEDIA / slug / "media.json"
+    if not m.exists():
+        return None
+    return {"dir": f"{ARTICLE_MEDIA}{slug}/", **json.loads(m.read_text(encoding="utf-8"))}
+
+
+def cites_of(it):
+    return "".join(f"[{c}]" for c in it.get("cite", []))
+
+
+def eyecatch_alt(a):
+    v = a.get("visual") or {}
+    dg = v.get("diagram") or {}
+    return f"{''.join(v.get('catch', []))}。{plain(dg.get('title', ''))}を示すイラスト"
+
+
+def thumb(it, rel, eager=False):
+    m = media_of(it["slug"])
+    if not m:
+        return ""
+    base = rel + m["dir"]
+    load = ' fetchpriority="high"' if eager else ' loading="lazy"'
+    return (f'<img class="card-thumb" src="{base}eyecatch-640.webp" srcset="{base}eyecatch-640.webp 640w, {base}eyecatch.webp 1200w" '
+            f'sizes="(max-width: 560px) 100vw, 360px" width="640" height="360" alt="{e(eyecatch_alt(it["article"]))}"{load} decoding="async">')
+
+
+def is_affiliate(site):
+    aff = site.get("affiliate") or {}
+    return bool(aff.get("amazon_tag") or aff.get("rakuten_affiliate_id"))
+
+
+def shop_links(site, query):
+    """商品の検索結果へのリンク。site.json の affiliate にIDがあればアフィリエイトリンクにする。"""
+    aff = site.get("affiliate") or {}
+    amazon = "https://www.amazon.co.jp/s?k=" + quote(query) + (f"&tag={quote(aff['amazon_tag'])}" if aff.get("amazon_tag") else "")
+    rakuten = f"https://search.rakuten.co.jp/search/mall/{quote(query, safe='')}/"
+    if aff.get("rakuten_affiliate_id"):
+        rakuten = f"https://hb.afl.rakuten.co.jp/hgc/{quote(aff['rakuten_affiliate_id'], safe='.')}/?pc={quote(rakuten, safe='')}"
+    return [("amazon", "Amazonで探す", amazon), ("rakuten", "楽天市場で探す", rakuten)]
+
+
+def shop_anchor(site, shop, label, url, item_label, placement, cls):
+    rel_attr = "sponsored noopener" if is_affiliate(site) else "noopener"
+    return (f'<a class="{cls}" href="{e(url)}" rel="{rel_attr}" target="_blank" data-shop="{shop}" '
+            f'data-item="{e(item_label)}" data-placement="{placement}">{label}</a>')
+
+
+def render_shop(site, a, placement="middle"):
+    items = a.get("shopping") or []
+    if not items:
+        return ""
+    pr = '<span class="shop-pr">PR</span>' if is_affiliate(site) else ""
+    if placement == "end":
+        lis = "".join(
+            f'<li><span class="shop-mini-label">{e(plain(it["label"]))}</span><span class="shop-mini-links">'
+            + "".join(shop_anchor(site, shop, label, url, plain(it["label"]), "end", "shop-mini-link")
+                      for shop, label, url in shop_links(site, it["query"])) + "</span></li>" for it in items)
+        return f'<aside class="shop-mini" aria-label="この記事の道具を探す">{pr}<p class="shop-mini-head">この記事の道具を探す</p><ul>{lis}</ul></aside>'
+    lis = "".join(
+        f'<li class="shop-item"><p class="shop-name">{e(plain(it["label"]))}</p><p class="shop-reason">{inline(it["reason"])}</p>'
+        '<p class="shop-links">' + "".join(shop_anchor(site, shop, label, url, plain(it["label"]), placement, f"shop-btn shop-{shop}")
+                                           for shop, label, url in shop_links(site, it["query"])) + "</p></li>" for it in items)
+    return (f'<aside class="shop" id="shop" aria-labelledby="shop-title">{pr}<h2 id="shop-title">この記事の条件で道具を探す</h2>'
+            f'<ul class="shop-list">{lis}</ul>'
+            '<p class="shop-fine">ボタンを押すと、各ショップの検索結果が新しいタブで開きます。価格や仕様は販売ページで確認してください。'
+            '当サイトは商品を試したり、順位を付けたりしていません。</p></aside>')
+
+
+def render_diagram(a):
+    v = a.get("visual") or {}
+    dg = v.get("diagram")
+    if not dg:
+        return ""
+    lis = []
+    for i, it in enumerate(dg["items"]):
+        detail = inline(f'{it["detail"]} {cites_of(it)}'.strip())
+        note = f'<span class="dg-note">{inline(it["note"])}</span>' if it.get("note") else ""
+        mark = f'<span class="dg-mark" aria-hidden="true">{i + 1 if dg["type"] == "steps" else ""}</span>'
+        lis.append(f'<li style="--i:{i}">{mark}<strong class="dg-label">{e(plain(it["label"]))}</strong>'
+                   f'<span class="dg-detail">{detail}</span>{note}</li>')
+    cap = f'<figcaption>{inline(dg["caption"])}</figcaption>' if dg.get("caption") else ""
+    return (f'<figure class="diagram dg-{e(dg["type"])}" id="diagram" aria-labelledby="diagram-title" style="--n:{len(dg["items"])}">'
+            f'<p class="dg-title" id="diagram-title">{e(plain(dg["title"]))}</p><ol class="dg-items">{"".join(lis)}</ol>{cap}</figure>')
+
+
+def render_explainer(a, media, rel):
+    v = a.get("visual") or {}
+    dg = v.get("diagram")
+    if not (media and dg and "explainer.mp4" in media.get("files", [])):
+        return ""
+    base = rel + media["dir"]
+    secs = round(media.get("video_seconds", 0))
+    steps = "".join(f'<li><strong>{e(plain(it["label"]))}</strong>：{inline((it["detail"] + " " + cites_of(it)).strip())}'
+                    + (f'（{inline(it["note"])}）' if it.get("note") else "") + "</li>" for it in dg["items"])
+    return f"""<section class="explainer" id="explainer" aria-labelledby="explainer-title">
+<h2 id="explainer-title">動画で見る：{e(plain(dg["title"]))}</h2>
+<figure class="explainer-film">
+<video controls muted playsinline preload="none" width="1280" height="720" poster="{base}explainer-poster.webp" data-play-in-view aria-label="{e(plain(dg["title"]))}の図解動画（音声なし）">
+<source src="{base}explainer.mp4" type="video/mp4">このブラウザーでは動画を再生できません。下の文字版をお読みください。
+</video>
+<figcaption>音声のない約{secs}秒の図解です。内容は下の文字版と同じです。</figcaption>
+</figure>
+<details class="faq transcript"><summary>動画を文章で読む</summary><ol>{steps}</ol></details>
+</section>"""
+
+
+def render_next(items, rel, current):
+    """記事ページの「次に読む」。リンクは記事どうしの相対パス（../<slug>/）にする。"""
+    if not items:
+        return ""
+    lis = "".join(f'<li><a href="../{it["slug"]}/">{thumb(it, rel)}<span class="next-title">{e(it["article"]["title"])}</span></a></li>'
+                  for it in items if it["slug"] != current)
+    return f'<section class="next-read" aria-labelledby="next-read-title"><h2 id="next-read-title">次に読む</h2><ul class="next-cards">{lis}</ul></section>'
 
 
 def render_brew_media(rel):
@@ -235,9 +353,11 @@ def render_article(site, item, by_slug):
     if op:
         article_ld["contributor"] = {"@type": "Person", "name": site["operator"], "url": site["base_url"] + "about.html"}
     photos = (op or {}).get("photos", [])
-    article_ld["image"] = [site["base_url"] + ph["src"] for ph in photos] or [site["base_url"] + OGP["path"]]
+    media = media_of(slug)
+    media_images = [site["base_url"] + media["dir"] + f for f in ("og.jpg", "eyecatch.webp")] if media else []
+    article_ld["image"] = [site["base_url"] + ph["src"] for ph in photos] + media_images or [site["base_url"] + OGP["path"]]
     og_image = ({"url": site["base_url"] + photos[0]["src"], "width": photos[0].get("width"), "height": photos[0].get("height")}
-                if photos else None)
+                if photos else {"url": site["base_url"] + media["dir"] + "og.jpg", "width": 1200, "height": 630} if media else None)
     crumbs = [("ホーム", site["base_url"], "../../")]
     if cat:
         crumbs.append((cat["name"], site["base_url"] + f"category/{cat['slug']}/", f"../../category/{cat['slug']}/"))
@@ -254,6 +374,13 @@ def render_article(site, item, by_slug):
     feature_html = render_brew_media("../../") if slug == BREW_FEATURE else ""
     if feature_html:
         toc = '<li><a href="#brew-studio-title">図と動画で見る</a></li>' + toc
+    diagram_html = render_diagram(a)
+    explainer_html = render_explainer(a, media, "../../")
+    n_sec = len(a["sections"])
+    video_after = 1 if n_sec > 2 else n_sec
+    shop_after = max(video_after + 1, min(n_sec, round(n_sec * 0.6)))
+    extra_toc = (f'<li><a href="#diagram">図で見る</a></li>' if diagram_html else "")
+    toc = extra_toc + toc
     def article_section(i, section):
         heading = plain(section["heading"])
         anchor = BREW_TOPIC_ANCHORS.get(heading) if slug == BREW_FEATURE else None
@@ -269,12 +396,18 @@ def render_article(site, item, by_slug):
         markup = f'<h2 id="sec{i}">{e(heading)}</h2>\n{content}'
         return f'<section id="{anchor}" aria-labelledby="sec{i}">{markup}</section>' if anchor else markup
 
-    sections = "\n".join(article_section(i, section) for i, section in enumerate(a["sections"], 1))
+    parts = []
+    for i, section in enumerate(a["sections"], 1):
+        parts.append(article_section(i, section))
+        if i == video_after and explainer_html:
+            parts.append(explainer_html)
+        if i == shop_after:
+            parts.append(render_shop(site, a))
+    sections = "\n".join(parts)
     related = [by_slug[r] for r in item.get("related", []) if r in by_slug and r != slug]
-    related_html = ""
-    if related:
-        related_html = ('<section class="related"><h2>あわせて読みたい</h2><ul>' + "".join(
-            f'<li><a href="../{r["slug"]}/">{e(r["article"]["title"])}</a></li>' for r in related) + "</ul></section>")
+    others = [it for it in by_slug.values() if it["slug"] != slug and it not in related]
+    next_items = (related + sorted(others, key=lambda it: it["date"], reverse=True))[:3]
+    related_html = render_next(next_items, "../../", slug)
     srcs = "\n".join(f'<li id="source{i}"><a href="{e(s["url"])}" rel="noopener">[{i}] {e(s["title"])}</a></li>'
                      for i, s in enumerate(a["sources"], 1))
     notice = {"中": "健康や表示に関わる内容を含みます。体質や持病がある方は医師などに相談してください。",
@@ -291,14 +424,23 @@ def render_article(site, item, by_slug):
                    else "この記事は生成AI（ChatGPT）で下書きし、別の生成AI（Claude）が出典ページの本文と照合・推敲して公開しました。")
     source_check = ("出典ページの本文を確認" if item.get("review_mode") == "manual"
                     else "出典ページを自動で取得し、本文と照合")
+    eyecatch_html = ""
+    if media:
+        base = "../../" + media["dir"]
+        eyecatch_html = (f'<figure class="eyecatch"><img src="{base}eyecatch.webp" srcset="{base}eyecatch-640.webp 640w, {base}eyecatch.webp 1200w" '
+                         f'sizes="(max-width: 760px) 100vw, 720px" width="1200" height="675" alt="{e(eyecatch_alt(a))}" fetchpriority="high" decoding="async"></figure>')
+    pr_note = ('<p class="pr-note">この記事には広告（アフィリエイトリンク）を含みます。</p>'
+               if a.get("shopping") and is_affiliate(site) else "")
     body = f"""<div class="wrap article-wrap">
 <nav class="breadcrumb" aria-label="パンくずリスト"><ol>{"".join(f'<li><a href="{h}">{e(n)}</a></li>' if h else f'<li>{e(n)}</li>' for n, _, h in crumbs)}</ol></nav>
 <article class="article">
-<p class="meta">公開日：{jp_date(date)}　最終更新日：{jp_date(modified)}　作成：{e(site["author"])}（生成AI）{byline_extra}</p>
 <h1>{e(a["title"])}</h1>
+<p class="meta">公開日：{jp_date(date)}　最終更新日：{jp_date(modified)}　作成：{e(site["author"])}（生成AI）{byline_extra}</p>
+{eyecatch_html}{pr_note}
 <div class="ai-note">{e(review_note)}{e(notice)}{human}</div>{operator_html}
 <div class="summary"><p class="summary-label">結論</p><p>{inline(a["conclusion"])}</p></div>
 <p>{inline(a["lead"])}</p>
+{diagram_html}
 <h2 id="can-do">この記事でわかること</h2><ul class="check">{"".join(f"<li>{inline(x)}</li>" for x in a["can_do"])}</ul>
 <nav class="toc" aria-label="目次"><p class="toc-label">目次</p><ol>{toc}</ol></nav>
 {feature_html}
@@ -308,6 +450,7 @@ def render_article(site, item, by_slug):
 {"".join(f'<details class="faq"><summary>{e(plain(f["q"]))}</summary><p>{e(plain(f["a"]))}</p></details>' for f in a["faq"])}
 <h2 id="next">次の一歩</h2>
 <p>{inline(a["next_step"])}</p>
+{render_shop(site, a, "end")}
 <h2 id="sources">出典・参考にした情報</h2>
 <ol class="sources">
 {srcs}
@@ -320,13 +463,13 @@ def render_article(site, item, by_slug):
                   page_type="article", extra_head="\n".join(ld(x) for x in lds) + "\n", image=og_image)
 
 
-def article_list(items, rel=""):
+def article_list(items, rel="", eager_first=False):
     if not items:
         return '<p class="empty">最初の記事を準備しています。公開までしばらくお待ちください。</p>'
-    return '<ul class="cards">' + "".join(
-        f'<li><a href="{rel}column/{it["slug"]}/"><span class="card-title">{e(it["article"]["title"])}</span>'
+    return '<ul class="cards has-thumbs">' + "".join(
+        f'<li><a href="{rel}column/{it["slug"]}/">{thumb(it, rel, eager=(n == 0 and eager_first))}<span class="card-title">{e(it["article"]["title"])}</span>'
         f'<span class="card-desc">{e(it["article"]["description"])}</span>'
-        f'<span class="card-date">{jp_date(it["date"])}</span></a></li>' for it in items) + "</ul>"
+        f'<span class="card-date">{jp_date(it["date"])}</span></a></li>' for n, it in enumerate(items)) + "</ul>"
 
 
 def group_by_category(site, items):
@@ -423,13 +566,13 @@ def render_index(site, items):
   </svg>
   <p>お湯の注ぎ方、豆の挽き目、フィルター。<br>家で一杯を淹れるときの手引きです。</p>
 </section>
-{spotlight}
 <section class="ed-section ed-articles" id="articles" aria-labelledby="all-articles">
   <div class="ed-section-heading">
     <h2 id="all-articles">記事一覧</h2>
   </div>
   <div>{article_list(items)}</div>
 </section>
+{spotlight}
 {category_nav(site, items)}
 <section class="ed-section ed-about" aria-labelledby="guide-title">
   <div class="ed-section-heading">
@@ -475,13 +618,14 @@ def build():
         p("記事は生成AI（ChatGPT）で作成します。自動公開の記事は別の生成AI（Claude）が出典を照合して推敲し、個別に出典を確認して編集した記事は、その方法を記事内に記載します。"),
         p("運営者や専門家による実際の試飲・器具のテスト・個別の確認は行っていません。記事内の体験談のような表現は使わない方針です。")])
     out["privacy.html"] = static_page(site, "プライバシーポリシー", "privacy.html", [
-        h2("アクセス解析"), p("当サイトでは、利用状況を把握するためにアクセス解析ツールを使う場合があります。収集されるデータは匿名で、個人を特定するものではありません。"),
+        h2("アクセス解析"), p("当サイトでは、利用状況を把握するためにアクセス解析ツール（Google アナリティクス）を使う場合があります。ページの閲覧時間や、記事内のリンク・動画の操作などを Cookie を使って匿名で集計し、個人を特定する情報は集めません。"),
         h2("広告"), p("当サイトは、第三者のアフィリエイトプログラムを利用する場合があります。広告配信事業者は、Cookieを使って閲覧者の興味に応じた広告を表示することがあります。"),
         h2("改定"), p("本ポリシーは、必要に応じて内容を見直し、このページで公開します。")])
     out["disclaimer.html"] = static_page(site, "免責事項・広告・AI利用について", "disclaimer.html", [
         h2("AIによる記事作成"), p("当サイトの記事は生成AIで作成し、確認した出典を記事ごとに掲載しています。内容の正確性には注意していますが、誤りが含まれる可能性があります。"),
         h2("健康に関する情報"), p("カフェインなど健康に関わる記述は一般的な情報です。体質・持病・妊娠中などの事情がある方は、医師や薬剤師に相談してください。"),
-        h2("広告について"), p("当サイトはアフィリエイト広告を利用することがあります。紹介する商品の価格や仕様は変わることがあるため、購入前に販売ページで確認してください。"),
+        h2("広告について"), p("当サイトはアフィリエイト広告を利用することがあります。記事内の「Amazonで探す」「楽天市場で探す」は各ショップの検索結果へのリンクで、当サイトは商品を試したり、順位を付けたりしていません。価格や仕様は変わることがあるため、購入前に販売ページで確認してください。"),
+        *([p("Amazonのアソシエイトとして、当サイトは適格販売により収入を得ています。")] if (site.get("affiliate") or {}).get("amazon_tag") else []),
         h2("免責"), p("当サイトの情報を利用したことで生じた損害について、当サイトは責任を負いかねます。")])
     root_path = urlparse(site["base_url"]).path  # 404はどの階層でも表示されるため絶対パスを使う
     out["404.html"] = layout(site, title="ページが見つかりません", description="お探しのページは見つかりませんでした。", rel=root_path,

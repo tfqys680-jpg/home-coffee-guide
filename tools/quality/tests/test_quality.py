@@ -241,6 +241,49 @@ class Cli(unittest.TestCase):
         self.assertIn("FAIL coffee-grams-per-cup", p.stdout)
 
 
+class VisualAndShoppingRules(unittest.TestCase):
+    """アイキャッチ・図解・動画の元（visual）と商品の検索リンク（shopping）は必須。出典のない図解や商品の推奨は落とす。"""
+
+    def errors(self, a):
+        return q.evaluate(a, fx.task()["主キーワード"], fx.task()["補助キーワード"], [], CATS)["errors"]
+
+    def test_good_sample_passes_with_visual_and_shopping(self):
+        self.assertTrue(q.evaluate(fx.good_amount(), fx.task()["主キーワード"], fx.task()["補助キーワード"], [], CATS)["pass"])
+
+    def test_missing_visual_or_shopping_fails(self):
+        for key, msg in (("visual", "visual"), ("shopping", "shopping")):
+            with self.subTest(key=key):
+                a = fx.good_amount()
+                del a[key]
+                self.assertTrue(any(msg in e for e in self.errors(a)), self.errors(a))
+
+    def test_diagram_needs_sources_and_catch_has_no_numbers(self):
+        a = fx.good_amount()
+        a["visual"]["catch"] = ["粉は10gで"]
+        a["visual"]["diagram"]["items"][0]["cite"] = []
+        errs = self.errors(a)
+        self.assertTrue(any("catch" in e and "数値" in e for e in errs), errs)
+        self.assertTrue(any("出典番号（cite）がない" in e for e in errs), errs)
+
+    def test_unknown_motif_and_too_few_items_fail(self):
+        a = fx.good_amount()
+        a["visual"]["motif"] = "robot"
+        a["visual"]["diagram"]["items"] = a["visual"]["diagram"]["items"][:2]
+        errs = self.errors(a)
+        self.assertTrue(any("motif" in e for e in errs), errs)
+        self.assertTrue(any("3〜6個" in e for e in errs), errs)
+
+    def test_shopping_must_not_recommend_or_invent_numbers(self):
+        a = fx.good_amount()
+        a["shopping"][0]["reason"] = "一番人気のスケールです。0.1g単位で量れるのでおすすめです。"
+        a["shopping"][1]["query"] = "https://www.amazon.co.jp/dp/XXXX"
+        errs = self.errors(a)
+        for word in ("おすすめ", "人気", "一番"):
+            self.assertTrue(any(word in e for e in errs), (word, errs))
+        self.assertTrue(any("出典番号のない数値" in e for e in errs), errs)
+        self.assertTrue(any("query" in e for e in errs), errs)
+
+
 class StorageCitationRegression(unittest.TestCase):
     """実際の保留原稿を固定し、既存の判定を変更せず修正版を検査する。"""
 
@@ -249,6 +292,9 @@ class StorageCitationRegression(unittest.TestCase):
         d = REPO / "docs/proposals/coffee-storage-20261126"
         cls.original = json.loads((d / "original-article.json").read_text())
         cls.fixed = json.loads((d / "article.json").read_text())
+        # 保存時の原稿には図解と商品の検索リンクがなかった（後から必須にした）。公開版で付けたものを足して数値の判定を確かめる
+        published = json.loads((REPO / "content/articles/coffee-bean-storage.json").read_text())["article"]
+        cls.fixed["visual"], cls.fixed["shopping"] = published["visual"], published["shopping"]
 
     def evaluate(self, article):
         existing = [item["article"] for p in (REPO / "content/articles").glob("*.json")

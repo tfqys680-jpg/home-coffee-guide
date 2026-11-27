@@ -29,7 +29,7 @@ def main():
     for page in pages:
         rel = page.relative_to(pub).as_posix()
         src = page.read_text(encoding="utf-8")
-        urls = re.findall(r'(?:href|src)="([^"]+)"', src)
+        urls = re.findall(r'(?:href|src|poster)="([^"]+)"', src)
         urls += [u for u in re.findall(r'content="([^"]+)"', src) if u.startswith(base_url)]  # og:image など
         for url in urls:
             if url.startswith(base_url):

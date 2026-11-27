@@ -31,6 +31,11 @@ jobs:
       - name: Skip while an automated PR awaits review
         id: guard
         run: echo "open=$(gh pr list --label auto-publish --state open --json number --jq length)" >> "$GITHUB_OUTPUT"
+      - name: Install media tools (Pillow, ffmpeg, Japanese fonts)
+        if: steps.guard.outputs.open == '0'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends ffmpeg fonts-noto-cjk python3-pil
       - name: Generate article (ChatGPT → Claude)
         if: steps.guard.outputs.open == '0'
         env:

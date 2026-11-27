@@ -31,6 +31,8 @@ import unicodedata
 from pathlib import Path
 
 ROOT = Path(os.environ.get("SITE_ROOT", Path(__file__).resolve().parents[2]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "media"))
+from media_spec import DIAGRAM_TYPES, MOTIFS, SHOP_BANNED  # noqa: E402
 
 FORMATS = ("手順", "比較", "トラブル解決", "基礎知識")
 # 出たら即不合格の決まり文句
@@ -190,6 +192,80 @@ def long_sentences(article):
 
 def numbers_of(article):
     return {re.sub(r"\s", "", x.group(0)) for u in body_units(article) for x in NUMBER_WITH_UNIT.finditer(strip_cites(u))}
+
+
+def visual_errors(article):
+    """アイキャッチ・図解・動画の元（visual）と、商品の検索リンク（shopping）の検査。
+    滞在時間と商品ページへの移動を生む部分なので、ない記事・出典のない図解・商品の推奨は不合格にする。"""
+    errors = []
+    n_src = len(article.get("sources", []))
+    v = article.get("visual")
+    if not isinstance(v, dict):
+        return ["アイキャッチ・図解・動画の元（visual）がない"] + shopping_errors(article)
+    catch = v.get("catch")
+    if not (isinstance(catch, list) and 1 <= len(catch) <= 3 and all(isinstance(c, str) and 2 <= len(c) <= 10 for c in catch)):
+        errors.append("visual.catch は1〜3行、各2〜10字にする（アイキャッチの見出し）")
+    elif any(NUMBER_WITH_UNIT.search(c) for c in catch):
+        errors.append("visual.catch に単位つきの数値を入れない（出典番号を示せないため）")
+    if v.get("motif") not in MOTIFS:
+        errors.append(f"visual.motif が「{v.get('motif')}」。{', '.join(MOTIFS)} のどれかにする")
+    dg = v.get("diagram")
+    if not isinstance(dg, dict):
+        errors.append("図解（visual.diagram）がない")
+        return errors + shopping_errors(article)
+    if dg.get("type") not in DIAGRAM_TYPES:
+        errors.append(f"図解の種類（visual.diagram.type）が「{dg.get('type')}」。{', '.join(DIAGRAM_TYPES)} のどれかにする")
+    if not 4 <= len(str(dg.get("title", ""))) <= 30:
+        errors.append("図解の見出し（visual.diagram.title）は4〜30字にする")
+    items = dg.get("items") or []
+    if not 3 <= len(items) <= 6:
+        errors.append(f"図解の項目が{len(items)}個（3〜6個にする）")
+    cited = 0
+    for i, it in enumerate(items):
+        label, detail, note = str(it.get("label", "")), str(it.get("detail", "")), str(it.get("note", ""))
+        if not 1 <= len(label) <= 12 or not 4 <= len(detail) <= 40 or len(note) > 40:
+            errors.append(f"図解の項目{i + 1}: label 1〜12字・detail 4〜40字・note 40字以内にする")
+        cites = it.get("cite") or []
+        if not all(isinstance(c, int) and 1 <= c <= n_src for c in cites):
+            errors.append(f"図解の項目{i + 1}: cite に存在しない出典番号がある {cites}")
+        if cites:
+            cited += 1
+        elif NUMBER_WITH_UNIT.search(detail + note):
+            errors.append(f"図解の項目{i + 1}: 単位つきの数値に出典番号（cite）がない")
+        if CITE.search(label + detail + note):
+            errors.append(f"図解の項目{i + 1}: 出典番号は本文の [n] ではなく cite に入れる")
+    need = len(items) if dg.get("type") in ("scale", "compare") else (len(items) + 1) // 2
+    if items and cited < need:
+        errors.append(f"図解の項目のうち出典（cite）があるのが{cited}個（{need}個以上必要。図解は出典の事実から作る）")
+    return errors + shopping_errors(article)
+
+
+def shopping_errors(article):
+    errors = []
+    shop = article.get("shopping")
+    if not isinstance(shop, list) or not 2 <= len(shop) <= 4:
+        return ["商品の検索リンク（shopping）が2〜4件ない"]
+    n_src = len(article.get("sources", []))
+    for i, it in enumerate(shop):
+        label, query, reason = str(it.get("label", "")), str(it.get("query", "")), str(it.get("reason", ""))
+        if not 4 <= len(label) <= 30:
+            errors.append(f"shopping[{i}].label は4〜30字にする")
+        elif NUMBER_WITH_UNIT.search(label):
+            errors.append(f"shopping[{i}].label に単位つきの数値を入れない（理由の文で出典を付けて書く）")
+        if not 2 <= len(query) <= 40 or re.search(r"https?:|www\.|[<>]", query):
+            errors.append(f"shopping[{i}].query は検索語（2〜40字、URLなし）にする")
+        if len(reason) < 30:
+            errors.append(f"shopping[{i}].reason が短い（記事の選び方の条件と結びつけて30字以上）")
+        for w in SHOP_BANNED:
+            if w in label + reason:
+                errors.append(f"shopping[{i}]: 推奨・順位づけの言葉「{w}」を使わない")
+        for s in re.split(r"(?<=[。！？!?])", reason):
+            if NUMBER_WITH_UNIT.search(strip_cites(s)) and not CITE.search(s):
+                errors.append(f"shopping[{i}].reason: 出典番号のない数値「{strip_cites(s).strip()[:30]}」")
+        bad = [int(x) for x in re.findall(r"\[(\d+)\]", reason) if not 1 <= int(x) <= n_src]
+        if bad:
+            errors.append(f"shopping[{i}].reason: 存在しない出典番号 {bad}")
+    return errors
 
 
 def evaluate(article, main_kw="", sub_kw="", existing=(), categories=None, limits=None):
@@ -385,6 +461,9 @@ def evaluate(article, main_kw="", sub_kw="", existing=(), categories=None, limit
         errors.append(f"既存記事とH2見出しが{head_dups}つ同じかほぼ同じ")
     elif head_dups:
         warnings.append("既存記事と同じかほぼ同じH2見出しが1つある")
+
+    # アイキャッチ・図解・動画と、商品の検索リンク（滞在時間と商品ページへの移動のための必須要素）
+    errors += visual_errors(article)
 
     metrics["chars"] = chars
     if limits:
