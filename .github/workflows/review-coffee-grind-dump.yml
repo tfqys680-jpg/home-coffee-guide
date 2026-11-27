@@ -1,0 +1,26 @@
+name: review-coffee-grind-dump
+# 一時ワークフロー: 審査run 45952100839 の成果物をログに出す（審査はやり直さない）。公開前に削除する。
+on:
+  pull_request:
+    types: [synchronize]
+permissions:
+  actions: read
+  contents: read
+jobs:
+  dump:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'claude/coffee-grind-size-guide-20261127'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: coffee-grind-review
+          run-id: 45952100839
+          github-token: ${{ github.token }}
+          path: review
+      - name: Print review outputs
+        run: |
+          cd review
+          for f in result.json round-1.json round-2.json article.json sources/*.txt; do
+            echo "=====FILE $f====="
+            base64 -w0 "$f"; echo
+          done
