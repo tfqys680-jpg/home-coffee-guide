@@ -1,0 +1,58 @@
+{
+  "pass": true,
+  "candidate_sha256": "f9307daffb8d6c4a7befa108aadd7bfa7b065786fd47c7c30e0ddfd579f2ac60",
+  "errors": [],
+  "verdict": "PASS",
+  "ymyl": "低",
+  "quality": {
+    "pass": true,
+    "errors": [],
+    "warnings": [],
+    "metrics": {
+      "informative_tables": 1,
+      "duplicate_sentences": 0,
+      "filler_per_1000": 0.0,
+      "hedge_per_1000": 0.0,
+      "keyword_max_per_1000": 3.2,
+      "uncited_numbers": 0,
+      "citations": 51,
+      "cited_units": 24,
+      "sources_cited": 5,
+      "unanchored_h2": 0,
+      "same_sentences": 0,
+      "near_sentence_share": 0.0,
+      "number_overlap": 0.0,
+      "max_similarity": 0.093,
+      "chars": 5597
+    }
+  },
+  "rounds": 1,
+  "sources": [
+    {
+      "url": "https://coffee.ajca.or.jp/column/4472/",
+      "verified": true,
+      "text_chars": 2481
+    },
+    {
+      "url": "https://bluebottlecoffee.com/us/eng/brew-guides/french-press",
+      "verified": true,
+      "text_chars": 4583
+    },
+    {
+      "url": "https://bluebottlecoffee.com/brew-guides/pour-over?creative_details=8-11000",
+      "verified": true,
+      "text_chars": 3963
+    },
+    {
+      "url": "https://bluebottlecoffee.com/us/eng/brew-guides/hot-over-ice",
+      "verified": true,
+      "text_chars": 4027
+    },
+    {
+      "url": "https://www.ucc.co.jp/enjoy/brew/goodcoffee_grind_02.html",
+      "verified": true,
+      "text_chars": 4343
+    }
+  ],
+  "review_run_url": "https://github.com/tfqys680-jpg/home-coffee-guide/actions/runs/45952887423"
+}

@@ -7,7 +7,8 @@
  "sub_kw": "コーヒー豆 冷凍;粉 保存 期間",
  "related": [
   "hand-drip-taste-adjustment",
-  "french-press-how-to"
+  "french-press-how-to",
+  "coffee-grind-size-guide"
  ],
  "pipeline": {
   "writer": "ChatGPT",
