@@ -1,7 +1,7 @@
 {
  "slug": "coffee-bean-storage",
  "date": "2026-11-26",
- "updated": "2026-11-27",
+ "updated": "2026-11-28",
  "ymyl": "中",
  "main_kw": "コーヒー豆 保存方法",
  "sub_kw": "コーヒー豆 冷凍;粉 保存 期間",
@@ -422,6 +422,41 @@
     "label": "使い切りやすい少量のコーヒー豆",
     "query": "コーヒー豆 少量",
     "reason": "常温の豆の鮮度の目安は、開封後1〜3週間です [1]。その間に飲み切れる量の袋を選ぶと、目安の範囲で使い切れます。"
+   }
+  ],
+  "products": [
+   {
+    "name": "アトモス バキュームキャニスター（ステンレス）",
+    "maker": "Fellow",
+    "model": "Atmos Vacuum Canister",
+    "facts": [
+     "ふたの真空ポンプで中の空気を抜く密閉容器",
+     "ステンレス製はガラス製と違い、紫外線から中身を守るとメーカーが説明",
+     "容量は0.4L・0.7L・1.2Lの3種類"
+    ],
+    "fit": "開封した豆を、光を通さない密閉容器に移して戸棚に置く、という記事の前提に合わせやすい容器の例です。",
+    "query": "Fellow アトモス キャニスター ステンレス",
+    "source": {
+     "title": "Fellow：Atmos Vacuum Canister（製品情報・FAQ）",
+     "url": "https://fellowproducts.com/products/atmos-vacuum-canister"
+    },
+    "checked": "2026-11-28"
+   },
+   {
+    "name": "ジップロック フリーザーバッグ",
+    "maker": "旭化成ホームプロダクツ",
+    "model": "",
+    "facts": [
+     "メーカーが紹介するコーヒー豆の冷凍方法は、元の袋の口を閉じてから入れ、空気を抜いて閉じるやり方",
+     "使うときは室温に戻してから袋を開ける（温度差で湿気るのを防ぐ）"
+    ],
+    "fit": "冷凍した豆を使う分ずつ分けておき、残りをすぐ冷凍庫へ戻すための袋の例です。",
+    "query": "ジップロック フリーザーバッグ",
+    "source": {
+     "title": "旭化成ホームプロダクツ：茶葉＆コーヒー豆の保存",
+     "url": "https://www.asahi-kasei.co.jp/saran/preservation/dry_food/food04.html"
+    },
+    "checked": "2026-11-28"
    }
   ]
  }

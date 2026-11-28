@@ -138,6 +138,23 @@ class BuildTest(unittest.TestCase):
         self.assertIn("Amazonのアソシエイトとして", self.page("index.html"))  # フッターにも出す
         self.assert_check_ok()
 
+    def test_product_examples_render_with_source_and_shop_links(self):
+        art = sample_article()
+        art["products"] = [{"name": "テストミル", "maker": "テスト社", "model": "TM-1", "facts": ["臼式の手挽きミル"],
+                            "fit": "器具ごとに挽き目を切り替えたい人向けの手挽きの例です。", "query": "テスト社 テストミル TM-1",
+                            "checked": "2026-11-28", "source": {"title": "テスト社：テストミル", "url": "https://www.example.co.jp/mill"}}]
+        self.add_article(article=art)
+        self.set_site(affiliate={"amazon_tag": "coffeetest-22", "rakuten_affiliate_id": ""})
+        self.build()
+        page = self.page(f"column/{SLUG}/index.html")
+        self.assertIn("条件に合う商品の例", page)
+        self.assertIn('<p class="prod-name">テストミル<span class="prod-model">TM-1</span></p>', page)
+        self.assertIn('href="https://www.example.co.jp/mill" rel="noopener">テスト社：テストミル</a>（2026年11月28日確認）', page)
+        self.assertIn('data-item="テスト社 テストミル" data-placement="product"', page)
+        self.assertIn("tag=coffeetest-22", page)
+        self.assertIn('<span class="shop-mini-label">テスト社 テストミル</span>', page)
+        self.assert_check_ok()
+
     def test_media_and_shop_are_required_on_article_pages(self):
         self.add_article()
         self.build()

@@ -240,6 +240,43 @@ def visual_errors(article):
     return errors + shopping_errors(article)
 
 
+def product_errors(article):
+    """商品の例（任意）。メーカー公式の出典・確認日つきで、順位・価格・推奨の言葉・使った感想を書かない。"""
+    errors = []
+    prods = article.get("products")
+    if prods is None:
+        return errors
+    if not isinstance(prods, list) or not 1 <= len(prods) <= 4:
+        return ["products は1〜4件にする"]
+    for i, p in enumerate(prods):
+        text = " ".join([str(p.get("name", "")), str(p.get("fit", ""))] + [str(f) for f in p.get("facts", [])])
+        if not p.get("name") or not p.get("maker"):
+            errors.append(f"products[{i}]: name と maker が必要")
+        facts = p.get("facts") or []
+        if not 1 <= len(facts) <= 4 or any(len(str(f)) > 70 for f in facts):
+            errors.append(f"products[{i}]: facts は1〜4項目、各70字以内（メーカー公式で確かめた仕様）")
+        if len(str(p.get("fit", ""))) < 20:
+            errors.append(f"products[{i}].fit が短い（記事のどの条件に合うかを20字以上）")
+        src = p.get("source") or {}
+        if not str(src.get("url", "")).startswith("https://") or not src.get("title"):
+            errors.append(f"products[{i}]: 仕様の出典（source.title と https の url）が必要")
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(p.get("checked", ""))):
+            errors.append(f"products[{i}]: 仕様を確かめた日（checked: YYYY-MM-DD）が必要")
+        query = str(p.get("query", ""))
+        if not 2 <= len(query) <= 60 or re.search(r"https?:|www\.|[<>]", query):
+            errors.append(f"products[{i}].query はショップで探す商品名（2〜60字、URLなし）にする")
+        for w in SHOP_BANNED:
+            if w in text:
+                errors.append(f"products[{i}]: 推奨・順位づけの言葉「{w}」を使わない")
+        if re.search(r"[0-9０-９,，]+\s*円|¥|￥|税込|税抜|価格|最安|セール", text):
+            errors.append(f"products[{i}]: 価格を書かない（変わるため。販売ページで確認してもらう）")
+        if re.search(r"使ってみ|試してみ|愛用|実際に使|私[はが]", text):
+            errors.append(f"products[{i}]: 使った感想・体験を書かない")
+        if NUMBER_WITH_UNIT.search(str(p.get("fit", ""))):
+            errors.append(f"products[{i}].fit に単位つきの数値を入れない（仕様は facts に出典つきで書く）")
+    return errors
+
+
 def shopping_errors(article):
     errors = []
     shop = article.get("shopping")
@@ -463,7 +500,7 @@ def evaluate(article, main_kw="", sub_kw="", existing=(), categories=None, limit
         warnings.append("既存記事と同じかほぼ同じH2見出しが1つある")
 
     # アイキャッチ・図解・動画と、商品の検索リンク（滞在時間と商品ページへの移動のための必須要素）
-    errors += visual_errors(article)
+    errors += visual_errors(article) + product_errors(article)
 
     metrics["chars"] = chars
     if limits:

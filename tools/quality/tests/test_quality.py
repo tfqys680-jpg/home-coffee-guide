@@ -284,6 +284,47 @@ class VisualAndShoppingRules(unittest.TestCase):
         self.assertTrue(any("query" in e for e in errs), errs)
 
 
+class ProductRules(unittest.TestCase):
+    """商品の例は任意。載せるならメーカー公式の出典・確認日つきで、順位・価格・推奨・感想を書かない。"""
+
+    def product(self):
+        return {"name": "テストミル", "maker": "テスト社", "model": "TM-1", "facts": ["臼式の手挽きミル", "挽き目を段階的に調整できる"],
+                "fit": "器具ごとに挽き目を切り替えたい人向けの手挽きの例です。", "query": "テスト社 テストミル TM-1",
+                "checked": "2026-11-28", "source": {"title": "テスト社：テストミル", "url": "https://www.example.co.jp/mill"}}
+
+    def test_published_products_are_valid_when_present(self):
+        # 自動記事には products がない（任意）。あるものだけ検査し、ない記事で verify が落ちないようにする
+        for p in sorted((REPO / "content/articles").glob("*.json")):
+            a = json.loads(p.read_text())["article"]
+            if "products" not in a:
+                continue
+            with self.subTest(slug=p.stem):
+                self.assertEqual(q.product_errors(a), [])
+
+    def test_article_without_products_passes_the_gate(self):
+        a = fx.good_amount()
+        self.assertNotIn("products", a)
+        self.assertTrue(q.evaluate(a, fx.task()["主キーワード"], fx.task()["補助キーワード"], [], CATS)["pass"])
+
+    def test_valid_product_passes_and_absent_is_allowed(self):
+        a = fx.good_amount()
+        self.assertEqual(q.product_errors(a), [])
+        a["products"] = [self.product()]
+        self.assertEqual(q.product_errors(a), [])
+
+    def test_rankings_prices_experience_and_missing_source_fail(self):
+        a = fx.good_amount()
+        bad = self.product()
+        bad["facts"].append("一番人気で税込1,980円")
+        bad["fit"] = "実際に使ってみて、約4分の抽出にちょうどよかったミルです。"
+        bad["source"] = {"title": "", "url": "http://example.com"}
+        bad["checked"] = ""
+        a["products"] = [bad]
+        errs = " ".join(q.product_errors(a))
+        for word in ("人気", "一番", "価格", "感想", "出典", "確かめた日", "単位つきの数値"):
+            self.assertIn(word, errs)
+
+
 class StorageCitationRegression(unittest.TestCase):
     """実際の保留原稿を固定し、既存の判定を変更せず修正版を検査する。"""
 
