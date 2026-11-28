@@ -237,12 +237,35 @@ def shop_anchor(site, shop, label, url, item_label, placement, cls):
             f'data-item="{e(item_label)}" data-placement="{placement}">{label}</a>')
 
 
+def render_products(site, a):
+    """記事の条件に合う商品の例（メーカー公式の仕様と出典つき）。順位・価格・使った感想は出さない。"""
+    prods = a.get("products") or []
+    if not prods:
+        return ""
+    cards = []
+    for p in prods:
+        label = f'{p["maker"]} {p["name"]}'
+        model = f'<span class="prod-model">{e(p["model"])}</span>' if p.get("model") else ""
+        facts = "".join(f"<li>{e(f)}</li>" for f in p["facts"])
+        links = "".join(shop_anchor(site, shop, text, url, label, "product", f"shop-btn shop-{shop}")
+                        for shop, text, url in shop_links(site, p["query"]))
+        src = p["source"]
+        cards.append(
+            f'<li class="prod"><p class="prod-maker">{e(p["maker"])}</p><p class="prod-name">{e(p["name"])}{model}</p>'
+            f'<p class="prod-fit">{inline(p["fit"])}</p><ul class="prod-facts">{facts}</ul>'
+            f'<p class="prod-src">仕様の出典：<a href="{e(src["url"])}" rel="noopener">{e(src["title"])}</a>（{jp_date(p["checked"])}確認）</p>'
+            f'<p class="shop-links">{links}</p></li>')
+    return f'<h3 class="shop-sub">条件に合う商品の例</h3><ul class="prod-list">{"".join(cards)}</ul><h3 class="shop-sub">種類から探す</h3>'
+
+
 def render_shop(site, a, placement="middle"):
     items = a.get("shopping") or []
     if not items:
         return ""
     pr = '<span class="shop-pr">PR</span>' if is_affiliate(site) else ""
     if placement == "end":
+        prod_items = [{"label": f'{p["maker"]} {p["name"]}', "query": p["query"]} for p in a.get("products") or []]
+        items = prod_items + items
         lis = "".join(
             f'<li><span class="shop-mini-label">{e(plain(it["label"]))}</span><span class="shop-mini-links">'
             + "".join(shop_anchor(site, shop, label, url, plain(it["label"]), "end", "shop-mini-link")
@@ -252,9 +275,11 @@ def render_shop(site, a, placement="middle"):
         f'<li class="shop-item"><p class="shop-name">{e(plain(it["label"]))}</p><p class="shop-reason">{inline(it["reason"])}</p>'
         '<p class="shop-links">' + "".join(shop_anchor(site, shop, label, url, plain(it["label"]), placement, f"shop-btn shop-{shop}")
                                            for shop, label, url in shop_links(site, it["query"])) + "</p></li>" for it in items)
+    fine_products = ("商品の例は、記事の条件に合うものをメーカーの公開情報で確かめて載せています。"
+                     if a.get("products") else "")
     return (f'<aside class="shop" id="shop" aria-labelledby="shop-title">{pr}<h2 id="shop-title">この記事の条件で道具を探す</h2>'
-            f'<ul class="shop-list">{lis}</ul>'
-            '<p class="shop-fine">ボタンを押すと、各ショップの検索結果が新しいタブで開きます。価格や仕様は販売ページで確認してください。'
+            f'{render_products(site, a)}<ul class="shop-list">{lis}</ul>'
+            f'<p class="shop-fine">{fine_products}ボタンを押すと、各ショップの検索結果が新しいタブで開きます。価格や仕様は販売ページで確認してください。'
             '当サイトは商品を試したり、順位を付けたりしていません。</p></aside>')
 
 
@@ -626,7 +651,7 @@ def build():
     out["disclaimer.html"] = static_page(site, "免責事項・広告・AI利用について", "disclaimer.html", [
         h2("AIによる記事作成"), p("当サイトの記事は生成AIで作成し、確認した出典を記事ごとに掲載しています。内容の正確性には注意していますが、誤りが含まれる可能性があります。"),
         h2("健康に関する情報"), p("カフェインなど健康に関わる記述は一般的な情報です。体質・持病・妊娠中などの事情がある方は、医師や薬剤師に相談してください。"),
-        h2("広告について"), p("当サイトはアフィリエイト広告を利用することがあります。記事内の「Amazonで探す」「楽天市場で探す」は各ショップの検索結果へのリンクで、当サイトは商品を試したり、順位を付けたりしていません。価格や仕様は変わることがあるため、購入前に販売ページで確認してください。"),
+        h2("広告について"), p("当サイトはアフィリエイト広告を利用することがあります。記事内の「Amazonで探す」「楽天市場で探す」は各ショップの検索結果へのリンクです。「条件に合う商品の例」は、記事で説明した条件に合うものを、メーカーの公開情報で仕様を確かめて載せています。当サイトは商品を試したり、順位を付けたりしていません。価格や仕様は変わることがあるため、購入前に販売ページで確認してください。"),
         *([p("Amazonのアソシエイトとして、当サイトは適格販売により収入を得ています。")] if (site.get("affiliate") or {}).get("amazon_tag") else []),
         h2("免責"), p("当サイトの情報を利用したことで生じた損害について、当サイトは責任を負いかねます。")])
     root_path = urlparse(site["base_url"]).path  # 404はどの階層でも表示されるため絶対パスを使う

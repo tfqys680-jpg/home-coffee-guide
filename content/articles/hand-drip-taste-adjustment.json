@@ -321,7 +321,58 @@
         "query": "セラミック コーヒーフィルター",
         "reason": "紙の代わりに本体で粉をこす方式です [7][8]。推奨の挽き目と洗い方を確認してから選びます [8][9]。"
       }
+    ],
+    "products": [
+      {
+        "name": "V60ドリップケトル・ヴォーノ",
+        "maker": "HARIO",
+        "model": "VKBR-120-HSV",
+        "facts": [
+          "注ぎ口が細く、お湯の量や速さを調整しやすいとメーカーが説明",
+          "実用容量800mL。ステンレス製、日本製"
+        ],
+        "fit": "記事のように「注ぐ速さだけ」を変えて比べたいときのケトルの例です。",
+        "query": "HARIO V60 ドリップケトル ヴォーノ VKBR-120",
+        "source": {
+          "title": "HARIO：V60ドリップケトル・ヴォーノ",
+          "url": "https://www.hario.com/product/coffee/kettle/VKB.html"
+        },
+        "checked": "2026-11-28"
+      },
+      {
+        "name": "V60用ペーパーフィルター02",
+        "maker": "HARIO",
+        "model": "VCF-02-100W",
+        "facts": [
+          "V60透過ドリッパー02用の円すい形ペーパー（1〜4杯用・100枚）",
+          "ドリッパーとペーパーのサイズを合わせて使う"
+        ],
+        "fit": "器具に合う紙を基準にして、挽き目や注ぎ方だけを変えて比べるための紙の例です。",
+        "query": "HARIO V60 ペーパーフィルター 02 VCF-02-100W",
+        "source": {
+          "title": "HARIO：V60用ペーパーフィルター",
+          "url": "https://www.hario.com/product/coffee/paperfilter/VCF.html"
+        },
+        "checked": "2026-11-28"
+      },
+      {
+        "name": "LOCA セラミックフィルター",
+        "maker": "LOCA",
+        "model": "",
+        "facts": [
+          "紙を使わず、細かな穴のあるセラミックでこす",
+          "挽き目はミルの最も粗い目盛りを推奨",
+          "使う前に熱湯で湯通しし、10回に1度は煮沸する"
+        ],
+        "fit": "紙以外のこし方で味を比べたいときの例です。推奨の挽き目と手入れが紙とは違います。",
+        "query": "LOCA セラミックフィルター コーヒー",
+        "source": {
+          "title": "LOCA：よくある質問（挽き目・使い方とお手入れ）",
+          "url": "https://locaceramicfilter.com/pages/faq"
+        },
+        "checked": "2026-11-28"
+      }
     ]
   },
-  "updated": "2026-11-27"
+  "updated": "2026-11-28"
 }
