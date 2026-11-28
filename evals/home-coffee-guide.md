@@ -98,4 +98,5 @@
 | F5 | ○ | `test_two_articles_published_and_linked`（画像・動画の生成まで）、`test_article_without_visual_or_shopping_is_held` | ci.yml・auto-publish.yml に ffmpeg・日本語フォント・Pillow を追加 |
 | F6 | 保留 | スマホ（390px）とPCのスクリーンショットで目視確認済み | 依頼者の判断待ち |
 | F7 | 保留 | GA4 の `affiliate_click`・`video_start`・`video_complete` イベントを実装 | 測定ID（site.json の ga_id）とアフィリエイトID（site.json の affiliate）の登録待ち |
+| F7 | 計測開始（2026-11-28） | site.json に GA4 測定ID・Amazon トラッキングID・楽天アフィリエイトID を設定。GA4 で affiliate_click をキーイベントに登録済み（運営者） | 公開後30日（2026-12-28 ごろ）に、平均エンゲージメント時間と affiliate_click の割合を判定。目標値は依頼者が決める |
 
