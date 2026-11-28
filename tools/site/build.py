@@ -73,6 +73,8 @@ def layout(site, *, title, description, rel, path, body, page_type="website", ex
     img_size = "".join(f'<meta property="og:image:{k}" content="{img[k]}">\n' for k in ("width", "height") if img.get(k))
     full_title = title if title == site["site_name"] else f"{title}｜{site['site_name']}"
     ga = ""
+    amazon_note = ("Amazonのアソシエイトとして、本サイトは適格販売により収入を得ています。"
+                   if (site.get("affiliate") or {}).get("amazon_tag") else "")
     if site.get("ga_id"):
         ga = (f'<script async src="https://www.googletagmanager.com/gtag/js?id={site["ga_id"]}"></script>\n'
               f"<script>window.dataLayer=window.dataLayer||[];function gtag(){{dataLayer.push(arguments);}}"
@@ -125,7 +127,7 @@ def layout(site, *, title, description, rel, path, body, page_type="website", ex
       <li><a href="{rel}privacy.html">プライバシーポリシー</a></li>
       <li><a href="{rel}disclaimer.html">免責事項・広告・AI利用について</a></li>
     </ul>
-    <p class="small">本サイトの記事は生成AIで作成し、確認した出典を記事ごとに掲載しています。本サイトはアフィリエイト広告を利用することがあります。</p>
+    <p class="small">本サイトの記事は生成AIで作成し、確認した出典を記事ごとに掲載しています。本サイトはアフィリエイト広告を利用することがあります。{amazon_note}</p>
     <p class="small">&copy; <span class="js-year">2026</span> {e(site['site_name'])}</p>
   </div>
 </footer>

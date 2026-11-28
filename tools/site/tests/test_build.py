@@ -118,6 +118,7 @@ class BuildTest(unittest.TestCase):
 
     def test_shop_links_become_affiliate_links_with_disclosure(self):
         self.add_article()
+        self.set_site(affiliate={"amazon_tag": "", "rakuten_affiliate_id": ""})  # IDが空のときは通常の検索リンク
         self.build()
         page = self.page(f"column/{SLUG}/index.html")
         self.assertIn('https://www.amazon.co.jp/s?k=', page)
@@ -134,6 +135,7 @@ class BuildTest(unittest.TestCase):
         self.assertIn('class="pr-note"', page)
         self.assertIn('<span class="shop-pr">PR</span>', page)
         self.assertIn("Amazonのアソシエイトとして", self.page("disclaimer.html"))
+        self.assertIn("Amazonのアソシエイトとして", self.page("index.html"))  # フッターにも出す
         self.assert_check_ok()
 
     def test_media_and_shop_are_required_on_article_pages(self):
